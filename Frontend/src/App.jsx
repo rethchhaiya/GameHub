@@ -1,12 +1,13 @@
-import React from 'react'
-import ExplorePage from './pages/ExplorePage'
+
+import { Routes, Route, BrowserRouter } from 'react-router-dom'
+import AppRoute from './routes'
 
 function App() {
   return (
-    <div className='text-green-500'>
-      <ExplorePage/>
-    </div>
-  )
+    <BrowserRouter>
+      <AppRoute/>
+    </BrowserRouter>
+  );
 }
 
 export default App
