@@ -13,6 +13,8 @@ function GameDetailsPage() {
   const [screenshots, setScreenshots] = useState([]);
   const [screenshotError, setScreenshotError] = useState("");
 
+  const [selectedScreenshot, setSelectedScreenshot] = useState(null);
+
   useEffect(() => {
     async function loadGame() {
       setLoading(true);
@@ -41,6 +43,20 @@ function GameDetailsPage() {
     }
     loadScreenshot();
   }, [id]);
+
+  useEffect(() => {
+    if (selectedScreenshot) {
+      const handleKeyDown = (event) => {
+        if (event.key === "Escape") {
+          setSelectedScreenshot(null);
+        }
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.removeEventListener("keydown", handleKeyDown);
+      };
+    }
+  }, [selectedScreenshot]);
 
   if (loading) {
     return (
@@ -191,6 +207,7 @@ function GameDetailsPage() {
                       className="overflow-hidden rounded-xl border border-white/10 bg-[#171a22]"
                     >
                       <img
+                        onClick={() => setSelectedScreenshot(img)}
                         src={img.image}
                         alt={`${game.name} screenshot`}
                         loading="lazy"
@@ -206,6 +223,31 @@ function GameDetailsPage() {
               <p className="mt-4 text-sm text-red-400">
                 Could not load screenshots: {screenshotError}
               </p>
+            )}
+
+            {selectedScreenshot && (
+              <div
+                onClick={() => setSelectedScreenshot(null)}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+              >
+                <div
+                  onClick={(event) => event.stopPropagation()}
+                  className="relative w-full max-w-5xl rounded-xl bg-[#171a22] p-4"
+                >
+                  <button
+                    onClick={() => setSelectedScreenshot(null)}
+                    className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-2 text-white hover:bg-black"
+                    aria-label="Close screenshot"
+                  >
+                    ✕
+                  </button>
+                  <img
+                    src={selectedScreenshot.image}
+                    alt={`${game.name} screenshot`}
+                    className="max-h-[80vh] w-full rounded-lg object-contain"
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>

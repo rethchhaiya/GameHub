@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { fetchGamesByName } from "../services/gameService";
+import { useEffect, useState } from "react";
+import { fetchGames, fetchGamesByName } from "../services/gameService";
 import GameCard from "../components/GameCard";
 
 function ExplorePage() {
@@ -8,25 +8,37 @@ function ExplorePage() {
   const [games, setGames] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
 
+
+  useEffect(() => {
+    async function loadGames() {
+      setLoading(true);
+      setError("");
+      try{
+        const result = await fetchGames();
+        setGames(result.results);
+      }catch(e){
+        setError(e.message);
+        setGames([]);
+      }finally{
+        setLoading(false);
+      }
+    }
+    loadGames();
+  }, [])
+
   async function handleSearch(event) {
     event.preventDefault();
-
-    if (!searchTerm.trim()) {
-      setError("Plese enter a game name");
-      setGames([]);
-      return;
-    }
 
     setLoading(true);
     setError("");
 
     try {
-      const result = await fetchGamesByName(searchTerm);
-      //   console.log(result.results);
+      const result = await (searchTerm.trim() ? fetchGamesByName(searchTerm) : fetchGames());
 
       setGames(result.results);
     } catch (e) {
       setError(e.message);
+      setGames([]);
     } finally {
       setLoading(false);
     }
@@ -84,7 +96,7 @@ function ExplorePage() {
         {loading && (
           <p className="mb-6 text-sm text-lime-300">Finding your games...</p>
         )}
-
+      
         {/* Game results */}
         {!loading && games.length > 0 && (
           <section>
@@ -124,6 +136,7 @@ function ExplorePage() {
             </p>
           </div>
         )}
+        
       </div>
     </main>
   );
