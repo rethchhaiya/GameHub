@@ -3,8 +3,11 @@ package com.gamehub.backend.services;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.gamehub.backend.dto.LoginRequest;
 import com.gamehub.backend.dto.RegisterRequest;
 import com.gamehub.backend.entity.User;
+import com.gamehub.backend.exception.EmailAlreadyExistsException;
+import com.gamehub.backend.exception.InvalidCredentialsException;
 import com.gamehub.backend.repository.UserRepository;
 
 @Service 
@@ -24,7 +27,7 @@ public class UserService {
 
     public void checkEmailAvailable(String email){
         if(emailExists(email)){
-            throw new IllegalArgumentException(
+            throw new EmailAlreadyExistsException(
                 "Email is already regiserted"
             );
         }
@@ -42,5 +45,16 @@ public class UserService {
         );
 
         return userRepository.save(user);
+    }
+
+    public User login(LoginRequest request){
+        User user = userRepository.findByEmail(request.getEmail())
+                                  .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
+
+        if(!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())){
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+
+        return user;
     }
 }

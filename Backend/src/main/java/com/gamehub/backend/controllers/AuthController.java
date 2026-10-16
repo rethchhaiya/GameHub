@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.gamehub.backend.dto.LoginRequest;
 import com.gamehub.backend.dto.RegisterRequest;
 import com.gamehub.backend.dto.RegisterResponse;
 import com.gamehub.backend.entity.User;
@@ -34,6 +35,15 @@ public class AuthController {
                                     user.getUsername(),
                                     user.getEmail()
         );
+    }
+
+    @PostMapping("/login")
+    public RegisterResponse login(@Valid @RequestBody LoginRequest request){
+        User user = userService.login(request);
+
+        return new RegisterResponse(user.getId(),
+                                    user.getUsername(),
+                                    user.getEmail());
     }
 
 }
