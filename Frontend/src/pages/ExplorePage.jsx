@@ -66,7 +66,7 @@ function ExplorePage() {
         {/* Search form */}
         <form
           onSubmit={handleSearch}
-          className="mb-10 flex w-full max-w-2xl gap-3 rounded-xl border border-white/10 bg-[#171a22] p-2 focus-within:border-lime-400/60"
+          className="mb-10 flex w-full lg:max-w-2xl max-w-full  gap-3 rounded-xl border border-white/10 bg-[#171a22] p-2 focus-within:border-lime-400/60"
         >
           <input
             type="text"

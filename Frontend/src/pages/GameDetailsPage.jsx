@@ -69,7 +69,7 @@ function GameDetailsPage() {
     return (
       <main className="min-h-screen bg-[#0c0e13] p-8 text-white">
         <p className="text-red-400">{error}</p>
-        <Link to="/" className="mt-4 inline-block text-lime-400">
+        <Link to="/explore" className="mt-4 inline-block text-lime-400">
           Back to Explore
         </Link>
       </main>
@@ -83,7 +83,7 @@ function GameDetailsPage() {
     <main className="min-h-screen bg-[#0c0e13] px-5 py-10 text-white sm:px-8 lg:px-12">
       <div className="mx-auto max-w-6xl">
         <Link
-          to="/"
+          to="/explore"
           className="mb-8 inline-block text-sm text-lime-400 transition hover:text-lime-300"
         >
           ← Back to Explore
