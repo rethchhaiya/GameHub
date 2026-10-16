@@ -14,11 +14,11 @@ public class BackendApplication {
 
 
 		System.out.println("DB_URL loaded: "
-            + (dotenv.get("DB_URL") != null));
-    System.out.println("DB_USERNAME loaded: "
-            + (dotenv.get("DB_USERNAME") != null));
-    System.out.println("DB_PASSWORD loaded: "
-            + (dotenv.get("DB_PASSWORD") != null));
+                        + (dotenv.get("DB_URL") != null));
+                System.out.println("DB_USERNAME loaded: "
+                        + (dotenv.get("DB_USERNAME") != null));
+                System.out.println("DB_PASSWORD loaded: "
+                        + (dotenv.get("DB_PASSWORD") != null));
 		SpringApplication.run(BackendApplication.class, args);
 	}
 
