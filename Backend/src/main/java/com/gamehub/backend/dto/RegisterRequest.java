@@ -20,6 +20,7 @@ public class RegisterRequest {
     @Size(min = 8, max = 72)
     private String password;
 
+
     public RegisterRequest() {
     }
 
@@ -46,4 +47,5 @@ public class RegisterRequest {
     public void setPassword(String password) {
         this.password = password;
     }
+
 }

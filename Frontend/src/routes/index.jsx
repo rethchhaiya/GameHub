@@ -11,6 +11,9 @@ import MainLayout from "../components/layouts/MainLayout";
 function AppRoute() {
   return (
     <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
       <Route element={<MainLayout />}>
         <Route path="/" element={<Navigate to={"/home"} replace />} />
         <Route path="/home" element={<HomePage />} />
@@ -18,8 +21,8 @@ function AppRoute() {
         <Route path="/library" element={<MyLibraryPage />} />
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/game/:id" element={<GameDetailsPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        
+        
       </Route>
     </Routes>
   );
