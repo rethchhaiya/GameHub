@@ -22,8 +22,8 @@ function RegisterPage() {
       return;
     } else {
       try {
-        const user = await registerUser({ username, email, password });
-        login(user);
+        const { token, user } = await registerUser({ username, email, password });
+        login(user, token);
         navigate("/home")
       } catch (err) {
         setError(

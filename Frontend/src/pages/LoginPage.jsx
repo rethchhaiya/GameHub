@@ -16,8 +16,8 @@ function LoginPage() {
     event.preventDefault();
 
     try {
-      const user = await loginUser({ email, password });
-      login(user);
+      const { token, user } = await loginUser({ email, password });
+      login(user, token);
       navigate("/home");
     } catch (err) {
       setError(

@@ -8,10 +8,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.gamehub.backend.dto.AuthResponse;
 import com.gamehub.backend.dto.LoginRequest;
 import com.gamehub.backend.dto.RegisterRequest;
 import com.gamehub.backend.dto.RegisterResponse;
 import com.gamehub.backend.entity.User;
+import com.gamehub.backend.services.JwtService;
 import com.gamehub.backend.services.UserService;
 
 import jakarta.validation.Valid;
@@ -22,30 +24,31 @@ import jakarta.validation.Valid;
 public class AuthController {
     
     private final UserService userService;
+    private final JwtService jwtService;
 
-    public AuthController(UserService userService){
+    public AuthController(UserService userService, JwtService jwtService){
         this.userService = userService;
+        this.jwtService = jwtService;
     }
 
     @PostMapping ("/register")
     @ResponseStatus (HttpStatus.CREATED)
-    public RegisterResponse register(@Valid @RequestBody RegisterRequest request){
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request){
 
         User user = userService.register(request);
 
-        return new RegisterResponse(user.getId(),
-                                    user.getUsername(),
-                                    user.getEmail()
-        );
+        String token = jwtService.generateToken(user);
+        
+        return new AuthResponse(token, new RegisterResponse(user.getId(), user.getUsername(), user.getEmail()));
     }
 
     @PostMapping("/login")
-    public RegisterResponse login(@Valid @RequestBody LoginRequest request){
+    public AuthResponse login(@Valid @RequestBody LoginRequest request){
         User user = userService.login(request);
 
-        return new RegisterResponse(user.getId(),
-                                    user.getUsername(),
-                                    user.getEmail());
+        String token = jwtService.generateToken(user);
+
+        return new AuthResponse(token, new RegisterResponse(user.getId(), user.getUsername(), user.getEmail()));    
     }
 
 }
