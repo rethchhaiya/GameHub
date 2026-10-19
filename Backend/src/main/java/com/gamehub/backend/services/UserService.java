@@ -1,5 +1,7 @@
 package com.gamehub.backend.services;
 
+import java.util.Optional;
+
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +25,10 @@ public class UserService {
 
     public boolean emailExists(String email){
         return userRepository.existsByEmail(email);
+    }
+
+    public Optional <User> findById(Long id){
+        return userRepository.findById(id);
     }
 
     public void checkEmailAvailable(String email){

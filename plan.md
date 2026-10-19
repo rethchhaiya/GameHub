@@ -29,7 +29,7 @@ Architecture in one line:
 
 React frontend → Spring Boot REST API → PostgreSQL database, with the Spring Boot backend also calling an external game API when game data is needed.
 
-Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (a `users` table exists), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — but the backend does not yet read the token from requests: there is no auth filter, no protected endpoint, and the frontend does not attach the token to API calls. The social/library features are not built yet. Details are in section 14.
+Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users` and `profiles` tables exist), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The social/library features are not built yet. Details are in section 14.
 
 ---
 
@@ -221,8 +221,8 @@ Conceptual entities discussed for GameHub. Only the entities below were planned;
 
 | Entity | Purpose | Status |
 | --- | --- | --- |
-| User | Account and credentials | Planned |
-| User profile | Profile data and gaming info | Planned |
+| User | Account and credentials | Implemented |
+| User profile | Profile data and gaming info | Implemented |
 | Game reference or cached game info | Optional local reference to external games | Planned, conditional |
 | Personal game library entry | Links a user to a game with a status | Planned |
 | Review | A user review of a game | Planned |
@@ -254,7 +254,7 @@ This is an Open decision (section 15). The plan is to avoid creating unnecessary
 ### Proposed vs confirmed schema
 
 - Proposed schema decisions: all entities and relationships in this section are proposed based on the planning discussion.
-- Confirmed schema decisions: the `users` table exists in PostgreSQL, created by the Flyway migration `V1__create_users_table.sql`, and is mapped by the `User` entity. Columns: `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). No other entity exists in code yet (verified in section 14).
+- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). No other entity exists in code yet.
 
 ---
 
@@ -360,7 +360,7 @@ Acceptance criteria:
 - React hides or blocks protected routes when unauthenticated.
 - Logout clears the session/token.
 
-Completion status: Partial.
+Completion status: Completed.
 
 - User model + `users` table via Flyway: Completed.
 - Registration endpoint `POST /api/auth/register`: Completed and manually tested (validation, BCrypt hashing, duplicate email returns 409, validation errors return 400).
@@ -371,9 +371,13 @@ Completion status: Partial.
 - Logout: Completed — clears the context and both `localStorage` keys, then navigates home.
 - Token issuance: Completed — `AuthController` injects `JwtService` and returns `AuthResponse` (`{ token, user }`) from register and login; verified manually (2026-10-18).
 - CORS + 401: Completed — global `CorsConfigurationSource` bean (origin `http://localhost:5173`, `/api/**`) answers the browser preflight; `authenticationEntryPoint` returns 401 JSON instead of Spring's default 403.
-- Remaining for Phase 3: `JwtAuthenticationFilter` (read `Authorization` header), a protected endpoint (`GET /api/users/me`), frontend `Authorization` header on requests, and protected React routes.
+- `JwtAuthenticationFilter` + chain registration: Completed — reads `Authorization: Bearer`, parses with `JwtService`, loads the user via `UserService.findById`, sets `SecurityContextHolder`; registered via `addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)`; invalid/absent tokens fail safe to 401. Manually tested (2026-10-18): valid token → 200, no token → 401, garbage token → 401.
+- `GET /api/users/me` (`UserController`): Completed — returns the authenticated user's `id`/`userName`/`email` from the SecurityContext principal; verified by curl (2026-10-18). `RegisterResponse.getid()` renamed to `getId()` — Jackson 3 ignored the non-standard name, so `id` was missing from JSON until fixed.
+- Frontend session validation on boot: Completed — `getCurrentUser()` in `authService.js` calls `/api/users/me` with the stored token; `AuthProvider` runs it in a `useEffect([])`, refreshes the stored user on success, and logs out only on 401.
+- Protected React routes: Completed (2026-10-19) — `PrivateRoute` component (`loading` → placeholder, no `user` → `<Navigate to="/login" replace />`, otherwise `<Outlet/>`); `/library` wrapped in it inside `MainLayout`. `AuthProvider` exposes a `loading` state set to `false` in `.finally()` after boot validation.
+- Attaching `Authorization` on future feature requests: pattern established in `getCurrentUser`; will be applied when library/reviews endpoints are built.
 
-Note: Spring Security and JWT are now in place for *issuing* tokens, but the server still never *reads* one — no request can carry an authenticated identity yet, so no endpoint may be treated as protected by the client until the filter exists. The frontend `token` in `localStorage` is the agreed interim storage (XSS trade-off open, section 15).
+Note: Spring Security and JWT now both issue *and* read tokens — the filter authenticates requests server-side, so `/api/hello` is genuinely protected. The remaining gap is on the client: it does not attach the token yet, and no user-specific endpoint (`/api/users/me`) exists. The frontend `token` in `localStorage` is the agreed interim storage (XSS trade-off open, section 15).
 
 ### Phase 4 — User profiles
 
@@ -395,7 +399,18 @@ Acceptance criteria:
 - Public profile shows only public information.
 - Editing is restricted to the owner.
 
-Completion status: Not started.
+Completion status: Completed (2026-10-19).
+
+- Profile model decision (2026-10-19): separate `profiles` table (Option B) — keeps auth data (`users`) separate from display data (`profiles`); one-to-one via `user_id` FK with `UNIQUE` + `ON DELETE CASCADE`.
+- Flyway `V2__create_profiles_table.sql`: Completed — applied; `profiles` table visible in the database.
+- `Profile` entity (`entity/Profile.java`): Completed — maps `profiles` table; `@OneToOne` + `@JoinColumn(name = "user_id")`; fields `id`, `user`, `bio`, `avatarUrl`, `createdAt`; getters/setters/constructors.
+- `ProfileRepository`: Completed — extends `JpaRepository<Profile, Long>`; `findByUserId(Long)` returns `Optional<Profile>`.
+- `ProfileRequest` / `ProfileResponse` DTOs: Completed.
+- `ProfileService`: Completed — `getProfileUserById`; `saveProfile` create-or-update with `@Transactional`.
+- `ProfileController`: Completed — `GET /api/profile/me` (200 or 404), `PUT /api/profile/me` (upsert); reads the principal from the SecurityContext.
+- Frontend profile page (`/profile`, protected): Completed — loads/edits `bio` + `avatarUrl`, live avatar preview, save, error/success banners; `/profile` route in `PrivateRoute`; Profile link in the Navbar.
+- CORS fix: the global `CorsConfigurationSource` is now wired explicitly via `.cors(cors -> cors.configurationSource(...))`; preflight returns `Access-Control-Allow-Origin`.
+- Verified (2026-10-19): `mvnw.cmd clean compile`, `npm run lint`, `npm run build`; manual `PUT`/`GET /api/profile/me` against the running backend.
 
 ### Phase 5 — Personal game library
 
@@ -501,14 +516,16 @@ The backend owns GameHub data and proxies external game data. Rows marked Curren
 
 | Area | Method | Path | Source | Status |
 | --- | --- | --- | --- | --- |
-| Health/greeting | GET | /api/hello | Spring Boot | Current — protected (401 JSON without token) |
+| Health/greeting | GET | /api/hello | Spring Boot | Current — protected (401 without token; 200 with valid Bearer token) |
 | Game list | GET | /api/games | External API via Spring Boot | Current |
 | Game search by name | GET | /api/games-name?name= | External API via Spring Boot | Current |
 | Game detail | GET | /api/games/{id} | External API via Spring Boot | Current |
 | Game screenshots | GET | /api/games/{id}/screenshots | External API via Spring Boot | Current |
 | Register | POST | /api/auth/register | PostgreSQL | Current (returns `{ token, user }`, 201) |
 | Login (credential check) | POST | /api/auth/login | PostgreSQL | Current (returns `{ token, user }`) |
-| Current user/profile | GET | /api/users/me | PostgreSQL | Planned |
+| Current user/profile | GET | /api/users/me | PostgreSQL | Current (returns `id`/`userName`/`email`; requires valid token) |
+| Current profile | GET | /api/profile/me | PostgreSQL | Current (requires token; 404 if none exists) |
+| Update profile | PUT | /api/profile/me | PostgreSQL | Current (requires token; creates or updates) |
 | Public profile | GET | /api/users/{id} | PostgreSQL | Planned |
 | Library | GET/POST/PUT/DELETE | /api/library | PostgreSQL | Planned |
 | Reviews | GET/POST/PUT/DELETE | /api/reviews | PostgreSQL | Planned |
@@ -574,7 +591,7 @@ Planned approach:
 
 Current evidence:
 
-- Backend: registration and login were manually tested (correct credentials, wrong password 401, unknown email 401, duplicate email 409, validation 400). Only a context-load test (BackendApplicationTests, contextLoads) exists as automation.
+- Backend: registration and login were manually tested (correct credentials, wrong password 401, unknown email 401, duplicate email 409, validation 400). Profile `PUT` (create) and `GET` were manually verified, and the CORS preflight was checked with curl (2026-10-19). Only a context-load test (BackendApplicationTests, contextLoads) exists as automation.
 - Frontend: no test setup configured in package.json; features have been verified manually in the browser.
 - Frontend CI checks in use: `npm run lint` (ESLint) and `npm run build` (Vite) both pass.
 
@@ -630,14 +647,17 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | GameDetailsPage (`/game/:id`) — details + screenshot lightbox | Completed | pages/GameDetailsPage.jsx |
 | GameCard component | Completed | components/GameCard.jsx |
 | API service layer (list, search, detail, screenshots) | Completed | services/gameService.js |
-| Auth service layer (`registerUser`, `loginUser`) | Completed | services/authService.js |
-| Auth context + provider + `useAuth` hook | Completed | contexts/authContext.js, contexts/AuthContext.jsx, hooks/useAuth.js |
+| Auth service layer (`registerUser`, `loginUser`, `getCurrentUser`) | Completed | services/authService.js (`getCurrentUser` calls `/api/users/me` with the stored token) |
+| Profile service layer (`getProfile`, `updateProfile`) | Completed | services/profileService.js — attaches `Authorization`, treats 404 as "no profile yet" |
+| Auth context + provider + `useAuth` hook | Completed | contexts/authContext.js, contexts/AuthContext.jsx, hooks/useAuth.js; boot `useEffect` validates the session via `getCurrentUser` (refreshes `user_Data` on 200, logs out on 401 only); exposes `loading` (true until boot validation finishes) |
 | Auth state mounted app-wide | Completed | main.jsx wraps `<App/>` in `<AuthProvider>` |
 | Navbar auth state (shows user name + Logout) | Completed | components/layouts/Navbar.jsx (reads `user.userName`, calls `logout`) |
 | LoginPage (`/login`) — form wired to `POST /api/auth/login` | Completed | pages/LoginPage.jsx (destructures `{ token, user }` → `login(user, token)` → `navigate('/home')`) |
 | RegisterPage (`/register`) — form wired to `POST /api/auth/register` | Completed | pages/RegisterPage.jsx (destructures `{ token, user }` → `login(user, token)` → `navigate('/home')`) |
-| MyLibraryPage / CommunityPage | Placeholder only | pages/MyLibraryPage.jsx, pages/CommunityPage.jsx (empty stubs) |
-| Routing | Completed | `/` redirects to `/home`; `/home`, `/explore`, `/library`, `/community`, `/game/:id`, `/login`, `/register` |
+| ProfilePage (`/profile`) — view/edit own profile | Completed | pages/ProfilePage.jsx (loads via `getProfile`, saves via `updateProfile`, live avatar preview, error/success banners) |
+| MyLibraryPage / CommunityPage | Placeholder only | pages/MyLibraryPage.jsx, pages/CommunityPage.jsx (empty stubs; `/library` is protected by `PrivateRoute`) |
+| Protected route guard (`PrivateRoute`) | Completed | routes/PrivateRoute.jsx — `loading` → placeholder, no `user` → `<Navigate to="/login" replace />`, else `<Outlet/>`; wired to `/library` and `/profile` in routes/index.jsx (2026-10-19) |
+| Routing | Completed | `/` redirects to `/home`; `/home`, `/explore`, `/library` (protected), `/profile` (protected), `/community`, `/game/:id`, `/login`, `/register` |
 | Frontend calls backend | Completed | fetch calls in gameService.js |
 | Lint / build | Passing | `npm run lint`, `npm run build` |
 
@@ -648,19 +668,25 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | Scaffold (Spring Boot 4.1.1, Java 21) | Current | pom.xml |
 | dotenv loading of .env | Current | BackendApplication.java |
 | PostgreSQL config (Neon, env vars, ddl-auto=none) | Completed | application.properties, .env |
-| Flyway migrations | Completed | V1__create_users_table.sql |
+| Flyway migrations | Completed | V1__create_users_table.sql, V2__create_profiles_table.sql |
 | `users` table | Completed | Flyway V1 |
+| `profiles` table | Completed | Flyway V2 — `user_id` FK → `users(id)`, `UNIQUE`, `ON DELETE CASCADE` (2026-10-19) |
 | `User` entity + `UserRepository` | Completed | entity/, repository/ |
+| `Profile` entity + `ProfileRepository` | Completed | entity/Profile.java (`@OneToOne` + `@JoinColumn(name = "user_id")`), repository/ProfileRepository.java (`findByUserId`) (2026-10-19) |
 | Registration (`POST /api/auth/register`) | Completed, tested | controllers/AuthController.java, services/UserService.java, dto/RegisterRequest.java |
 | Login credential verification (`POST /api/auth/login`) | Completed, tested | controllers/AuthController.java, dto/LoginRequest.java |
 | BCrypt password hashing | Completed | config/PasswordConfig.java |
 | Validation + exception handling (400/401/409) | Completed | dto annotations, controllers/GlobalExceptionHandler.java, execption/InvalidCredentialsException.java, execption/EmailAlreadyExistsException.java |
-| CORS for the Vite dev origin | Completed | Global `CorsConfigurationSource` bean in `config/SecurityConfig.java` (origin 5173, `/api/**`) + legacy `@CrossOrigin` on controllers |
+| CORS for the Vite dev origin | Completed | `CorsConfigurationSource` bean in `config/SecurityConfig.java` (origin 5173, `/api/**`), wired explicitly with `.cors(cors -> cors.configurationSource(...))`; legacy `@CrossOrigin` remains on some controllers |
 | External game API (RAWG) integration | Completed | game endpoints used by the frontend |
 | JWT — sign/verify (`JwtService`) + config | Completed | services/JwtService.java, application.properties (`jwt.secret`, `jwt.expiration-ms`) |
 | JWT — token issuance (`AuthResponse` `{ token, user }`) | Completed, tested | controllers/AuthController.java, dto/AuthResponse.java (2026-10-18) |
-| JWT — request filter / authenticated identity | Not started | no filter reads `Authorization` yet |
-| Protected endpoints | Partial | `GET /api/hello` rejects with 401 JSON, but no endpoint accepts a token yet |
+| JWT — request filter / authenticated identity | Completed, tested | `security/JwtAuthenticationFilter.java` — parses `Authorization: Bearer`, loads the user, sets `SecurityContextHolder` (2026-10-18) |
+| `GET /api/users/me` (`UserController`) | Completed, tested | `controllers/UserController.java` — reads the principal from the SecurityContext, returns `RegisterResponse` (2026-10-18) |
+| Profile DTOs (`ProfileRequest`, `ProfileResponse`) | Completed | `dto/ProfileRequest.java` (input: `bio`, `avatarUrl`), `dto/ProfileResponse.java` (output: `id`, `userId`, `bio`, `avatarUrl`, `createdAt`) |
+| `ProfileService` | Completed | `services/ProfileService.java` — `getProfileUserById`, `saveProfile` create-or-update with `@Transactional` |
+| `ProfileController` | Completed, tested | `controllers/ProfileController.java` — `GET`/`PUT /api/profile/me`, reads the principal (2026-10-19) |
+| Protected endpoints | Completed | `GET /api/hello`, `GET /api/users/me`, and `GET/PUT /api/profile/me` accept a valid token (200) and reject without one (401) |
 | Automated feature tests | Not started | only contextLoads |
 | `mvnw.cmd clean compile` | Passing | verified by author |
 
@@ -669,7 +695,7 @@ Observed notes:
 - The frontend includes React Router and lucide-react, which were not in the originally stated stack. React Router is used; lucide-react is installed but still unused (Open, section 15).
 - The backend uses package `com.gamehub.backend` with `controllers`, `services`, `entity`, `repository`, `dto`, `config`, and `exception` subpackages.
 - Login/register now return `AuthResponse` (`{ token, user }`); the nested user still serializes as `id`/`userName`/`email` because the inner DTO's getters are unchanged. Renaming `RegisterResponse` to a general `UserResponse` would improve clarity (not urgent).
-- `RegisterResponse` getter names determine the JSON keys Jackson emits: `getid()` → `id`, `getUserName()` → `userName` (capital N), `getEmail()` → `email`. The frontend Navbar therefore reads `user.userName`. The entity uses the conventional `getUsername()`; aligning the DTO getter (or adding `@JsonProperty("username")`) would make the key `username`.
+- `RegisterResponse` getter names determine the JSON keys Jackson emits, but only when they follow the JavaBean convention: `getId()` → `id`, `getUserName()` → `userName` (capital N), `getEmail()` → `email`. The old `getid()` was silently ignored by Jackson 3 — `id` was missing from `/me`, register, and login JSON until it was renamed (2026-10-18). The frontend Navbar therefore reads `user.userName`. The entity uses the conventional `getUsername()`; aligning the DTO getter (or adding `@JsonProperty("username")`) would make the key `username`.
 - The exception classes live in a misspelled package folder `execption/` while declaring `package com.gamehub.backend.exception`; `PasswordConfig.java` sits in the root package rather than a `config/` package. Cosmetic, not refactored.
 - The .env file was committed to git and then untracked (commit caea6b0). Secrets remain in history; rotating them may be advisable. This is Open.
 
@@ -680,16 +706,16 @@ Observed notes:
 Open decisions:
 
 - External game API: RAWG is confirmed and integrated. The API key is stored server-side (env variable) and not committed.
-- Auth architecture: Spring Security + JWT confirmed and partially implemented — stateless filter chain, `JwtService` (HS256), token issuance, global CORS bean, 401 entry point. Still open: refresh-token strategy (single 24h access token is the current choice), and the `JwtAuthenticationFilter` itself.
+- Auth architecture: Spring Security + JWT implemented and verified — stateless filter chain, `JwtService` (HS256), token issuance and request validation, explicit CORS wiring, 401 entry point, protected routes. Still open: refresh-token strategy (single 24h access token is the current choice).
 - Game references: store only external ids with cached display fields, or store a local game record for libraries and reviews. Still open.
-- Profile model: separate profile entity or fields on the user. Still open.
+- Profile model: decided (2026-10-19) — separate `profiles` table (one-to-one with `users`) and a `Profile` entity. Implemented.
 - Reviews: whether edit/delete is in the MVP or right after. Still open.
 - Likes/reactions: which content types can be liked. Still open.
 - Frontend testing tool: choose one. Still open.
 - lucide-react: officially adopted or incidental. Still open (installed but unused).
 - Deployment targets for frontend, backend, and PostgreSQL. Still open.
-- CORS between the Vite dev server and Spring Boot: addressed with a global `CorsConfigurationSource` bean (origin `http://localhost:5173`, `/api/**`); the legacy `@CrossOrigin` annotations are now redundant. Revisit allowed origins when a production frontend URL exists. Still open (refinement).
-- Client-side session approach: the JWT is stored in `localStorage` (`token`) and the user object in `user_Data`. `token` storage is functional but carries an XSS trade-off (vs httpOnly cookies) — confirm it stays the chosen approach when the filter lands.
+- CORS between the Vite dev server and Spring Boot: resolved (2026-10-19). `.cors(Customizer.withDefaults())` did not pick up the bean; explicit wiring (`.cors(cors -> cors.configurationSource(...))`) fixed preflight for all `/api/**` paths. The legacy `@CrossOrigin` annotations are redundant. Revisit allowed origins when a production frontend URL exists.
+- Client-side session approach: the JWT is stored in `localStorage` (`token`) and the user object in `user_Data`. `token` storage is functional but carries an XSS trade-off (vs httpOnly cookies) — still the chosen interim approach now that the filter is implemented.
 - Secrets in git history from the earlier .env commit: whether to rotate. Still open.
 
 Dependencies between features:
@@ -719,8 +745,8 @@ These are ideas only. They must not block MVP completion.
 
 ## 17. Immediate Next Steps
 
-1. Complete authentication persistence — add the `JwtAuthenticationFilter` (read `Authorization: Bearer`, populate the SecurityContext), a protected `GET /api/users/me`, the frontend `Authorization` header + 401 handling, and protected React routes — this finishes Phase 3. Tokens are already issued and stored.
-2. Continue with the remaining MVP features in order: profiles, library, reviews, community posts.
+1. Phase 4 is complete (2026-10-19): profiles work end to end (backend + React page), protected routes guard `/library` and `/profile`, and `profileService` shows the pattern for attaching `Authorization` — reuse it for library/review calls.
+2. Next: Phase 5 (personal game library). First decide the game-reference strategy (external RAWG id + cached display fields vs a local game record) — still Open (section 15).
 3. Keep .env untracked and consider rotating any secrets already committed.
 
 ---
@@ -755,6 +781,9 @@ These are ideas only. They must not block MVP completion.
 | 24 | Return `AuthResponse` (`{ token, user }`) from register and login; nest the existing user DTO | One response shape for both auth endpoints; nesting keeps the `userName` key the Navbar reads | Implemented (2026-10-18) |
 | 25 | Handle CORS globally with a `CorsConfigurationSource` bean in `SecurityConfig` + a 401 JSON entry point | Security filters run before MVC, so `@CrossOrigin` cannot answer preflights once `anyRequest().authenticated()` exists; Spring's default 403 is wrong for a token API | Implemented (2026-10-18) |
 | 26 | Store the JWT in `localStorage` (`token`) alongside `user_Data`, and self-heal corrupt stored JSON with `try/catch` | Simple persistence across refreshes; storage is untrusted input so a bad value must not white-screen the app | Implemented (2026-10-18, XSS trade-off open) |
+| 27 | Model profiles as a separate `profiles` table (one-to-one via `user_id`) | Keep auth data (`users`) separate from display data; `UNIQUE` + `ON DELETE CASCADE` | Implemented (2026-10-19) |
+| 28 | Wire the CORS bean explicitly with `.cors(cors -> cors.configurationSource(...))` | `Customizer.withDefaults()` silently failed to apply the bean; explicit wiring guarantees the filter uses it | Implemented (2026-10-19) |
+| 29 | Keep profile endpoints authenticated and read the user from the SecurityContext | The token already identifies the user; the client should not supply a user id | Implemented (2026-10-19) |
 
 This table is the reference for future sessions. Do not change decision 8 (Option C) or the MVP-first strategy without an explicit new decision.
 
@@ -825,3 +854,20 @@ Objective: become capable of designing, implementing, debugging, and explaining 
 | 2026-10-18 | Auth — `JSON.stringify(undefined)` | Returns `undefined` (the value, not a string); `localStorage.setItem` coerces it to the literal `"undefined"`; later `JSON.parse` throws | Corrupt storage is persistent — every boot re-reads it until explicitly removed. |
 | 2026-10-18 | Auth — `try/catch` on untrusted storage | Lazy `useState` initializer wrapped in `try/catch`: catch removes the junk and returns `null` (self-healing read) | `throw` unwinds the stack until caught; the catch block must supply the return value; wrong *values* (swapped args) never throw — only exceptions are caught. |
 | 2026-10-18 | Auth — positional argument order | `login(token, user)` vs `login(userData, token)`: call-site order must match parameter order; object *destructuring* order is irrelevant | A silent bug — no error, just the wrong data stored under the wrong keys. |
+| 2026-10-18 | JWT filter — `@Override` contract | `@Override` makes the compiler verify the method name/signature against the parent; the `doFilterInteral` typo failed the build instead of silently never running | A promise enforced at compile time — cheaper than a runtime mystery. |
+| 2026-10-18 | JWT filter — always pass the ball | Every path through a filter must end in `chain.doFilter(...)` or the request dies with an empty response | Only deliberate blocking (writing a own response) may stop the chain; the happy path was the one missing it. |
+| 2026-10-18 | JWT filter — typed `catch` | Java requires `catch (Type e)` — no bare catch; `e` holds the exception like JS `catch (error)` | The compiler forces you to name what you handle. |
+| 2026-10-18 | JWT filter — `SecurityContextHolder` | Thread-local pocket: the filter writes via `setAuthentication`, Spring's `AuthorizationFilter` reads later; one value per request thread | Per-thread state means concurrent users never share identity. |
+| 2026-10-18 | JWT filter — `UsernamePasswordAuthenticationToken` | Triplet (principal, credentials, authorities): who / proof already spent (`null`) / roles (`List.of()`) | The common ticket every Spring authentication method eventually produces. |
+| 2026-10-18 | JWT filter — fail-safe catch | Invalid token ≈ no token: catch `JwtException`, set nothing, continue unauthenticated → entry point answers 401 | Filters hand off; they don't write error responses. Verified with a garbage-token curl. |
+| 2026-10-18 | JWT filter — layer delegation | `UserService.findById` delegates to `UserRepository.findById` (inherited from `JpaRepository`); the filter talks only to the service | Interfaces inherit methods; layering keeps the filter off raw repositories. |
+| 2026-10-18 | Frontend — boot validation | `useEffect` with `[]` runs once on mount; promise chain inside (no `async` on the effect itself); only 401 signs the user out — network errors must not | `localStorage` is untrusted; the server is the source of truth for the session. |
+| 2026-10-18 | Frontend — case-sensitive storage keys | `user_data` vs `user_Data` are two different localStorage slots; the wrong casing wrote the fresh user where nobody reads it | Same bug family as argument order and `getid()` — structure right, one naming detail wrong, no error. Trace every occurrence of a key. |
+| 2026-10-18 | Jackson — JavaBean naming | `getid()` is not `getId()` — Jackson 3 ignores non-standard getters, so `id` silently vanished from JSON (`/me`, register, login) | Convention over configuration: detection follows a naming rule; breaking it fails silently, not loudly. |
+| 2026-10-18 | JSON — key order | JSON objects are unordered key-value maps; serialization order (`email` before `userName`) is an implementation detail | Never depend on key order; display order is the UI's job. |
+| 2026-10-19 | Profiles — entity vs DTO | Entity maps the `profiles` table (Hibernate); DTOs carry JSON to/from the frontend (Jackson) | Different layers, different jobs — never expose the entity directly. |
+| 2026-10-19 | Profiles — `Optional` create-or-update | `findByUserId(...).map(update).orElseGet(create)` handles "exists" and "missing" in one chain | `.map` only runs when present; `.orElseGet` supplies the fallback; both return the saved `Profile`. |
+| 2026-10-19 | CORS vs authorization | `permitAll()` controls access; CORS controls which browser origins may call the API | A CORS failure is not fixed by `permitAll` — they are separate layers. |
+| 2026-10-19 | Spring — bean discovery vs explicit wiring | `.cors(Customizer.withDefaults())` relied on discovering the bean and silently skipped it; `.cors(cors -> cors.configurationSource(bean))` is explicit | Explicit is predictable — the same idea as passing a function instead of hoping something is found. |
+| 2026-10-19 | React — prop names are the contract | `handleSubmit={...}` is just an unknown prop on `<form>`; only `onSubmit` wires the handler | A wrong prop name fails silently and the native submit reloads the page, wiping state. |
+| 2026-10-19 | React — `setState` in effects | React 19 lint rejects synchronous `setState` in an effect body; initialize state from `localStorage` instead and update in promise callbacks | Avoids cascading renders; effects should sync with external systems, not derive initial state. |

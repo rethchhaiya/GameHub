@@ -9,5 +9,6 @@ import com.gamehub.backend.entity.User;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
+    Optional<User> findById(Long id);
     boolean existsByEmail(String email);
 }

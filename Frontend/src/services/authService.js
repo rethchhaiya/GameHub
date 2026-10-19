@@ -56,3 +56,28 @@ export async function loginUser(userData) {
     throw error;
   }
 }
+
+export async function getCurrentUser() {
+  try{
+    const token = localStorage.getItem("token");
+     
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if(!response.ok){
+      const error = new Error(`Request failed (${response.status})`);
+      error.status = response.status;
+
+      throw error;
+    }
+    const data = await response.json();
+
+    return data;
+  }catch(error){
+    console.error("Failed to fetch current user", error);
+    throw error;
+  }
+}

@@ -12,7 +12,7 @@ public class RegisterResponse {
         this.email = email;
     }
 
-    public Long getid(){
+    public Long getId(){
         return id;
     }
 

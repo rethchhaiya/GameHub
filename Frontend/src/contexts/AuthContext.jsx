@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthContext } from "./authContext";
+import { getCurrentUser } from "../services/authService";
 
 export function AuthProvider({ children }){
+
     const [user, setUser] = useState(() => {
         try{
             const saved = localStorage.getItem("user_Data");
@@ -12,6 +14,29 @@ export function AuthProvider({ children }){
             return null;
         }
     });
+    const [loading, setLoading] = useState(() => Boolean(
+        localStorage.getItem("token")
+    ));
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if(!token) {
+            return;
+        }
+
+        getCurrentUser().then((freshUser) => {
+            setUser(freshUser);
+            localStorage.setItem("user_Data", JSON.stringify(freshUser));
+        }).catch((error) => {
+            if(error.status === 401){
+                setUser(null);
+                localStorage.removeItem("user_Data");
+                localStorage.removeItem("token");
+            }
+        }).finally(() => {
+            setLoading(false);
+        });
+    }, []);
 
     function login(userData, token) {
 
@@ -32,7 +57,7 @@ export function AuthProvider({ children }){
     }
 
     return(
-        <AuthContext.Provider value={{user, login, logout}}>
+        <AuthContext.Provider value={{user, login, logout, loading}}>
             {children}
         </AuthContext.Provider>
     )

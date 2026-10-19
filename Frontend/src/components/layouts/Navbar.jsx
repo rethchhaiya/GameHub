@@ -43,6 +43,9 @@ function Navbar() {
               <span className="text-gray-300 tex px-3 font-bold flex items-center">
                 Hi, {user.userName}
               </span>
+              <NavLink className="flex items-center px-3 hover:text-lime-400 rounded-[5px] hover:bg-white/10" to={"/profile"}>
+                Profile
+              </NavLink>
               <button
                 onClick={handleLogout}
                 className="rounded-[5px] border border-white/10 px-3 py-1 font-bold text-gray-300 hover:border-white/30"
@@ -112,9 +115,15 @@ function Navbar() {
               <span className="text-center text-gray-300 font-bold">
                 hi,{user.userName}
               </span>
+              <NavLink
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center" to={"/profile"}>
+                Profile
+              </NavLink>
               <button
-              onClick={handleLogout}
-              className="rounded-[5px] border border-white/10 px-3 py-2 font-bold text-gray-300">
+                onClick={handleLogout}
+                className="rounded-[5px] border border-white/10 px-3 py-2 font-bold text-gray-300"
+              >
                 Logout
               </button>
             </>

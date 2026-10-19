@@ -3,7 +3,7 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -17,7 +17,7 @@ Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not
 | Backend | Java 21, Spring Boot 4.1.1 |
 | Database | PostgreSQL (Neon), Flyway migrations |
 | External API | RAWG (called by Spring Boot, key server-side) |
-| Auth | Registration + login (verified); React auth context + `useAuth`; JWT: register/login return `{ token, user }`, token stored in `localStorage`. **In progress** — request filter + protected endpoints still pending |
+| Auth | Registration + login (verified); React auth context + `useAuth`; JWT: register/login return `{ token, user }`, token stored in `localStorage`; **`JwtAuthenticationFilter` authenticates requests** and **`GET /api/users/me` returns the current user** (both verified); frontend validates the session on boot and attaches `Authorization` to profile calls. Protected routes (`/library`, `/profile`) done |
 
 ---
 
@@ -31,9 +31,9 @@ Root: `Frontend/`
 | --- | --- | --- |
 | `src/App.jsx` | Renders `BrowserRouter` + `AppRoute` | Done |
 | `src/main.jsx` | Mounts the app; wraps `<App/>` in `<AuthProvider>` | Done |
-| `src/routes/index.jsx` | Route table nested under a layout route | Done |
+| `src/routes/index.jsx` | Route table nested under a layout route; `/library` and `/profile` wrapped in `PrivateRoute` | Done |
 | `src/components/layouts/MainLayout.jsx` | Navbar + `<Outlet/>` + Footer; flex column pins footer | Done |
-| `src/components/layouts/Navbar.jsx` | Brand, nav links (active highlight), responsive hamburger menu, auth links | Done |
+| `src/components/layouts/Navbar.jsx` | Brand, nav links (active highlight), responsive hamburger menu, auth links, Profile link when logged in | Done |
 | `src/components/layouts/Footer.jsx` | Copyright + RAWG attribution, responsive | Done |
 
 ### Pages
@@ -45,7 +45,8 @@ Root: `Frontend/`
 | `src/pages/GameDetailsPage.jsx` | `/game/:id` | Details, genres/devs/publishers/platforms, screenshot lightbox (Esc/close) | Done |
 | `src/pages/LoginPage.jsx` | `/login` | Login form → `loginUser` → destructure `{token, user}` → `login(user, token)` → `navigate('/home')`; error display | Done |
 | `src/pages/RegisterPage.jsx` | `/register` | Register form + confirm-password check → `registerUser` → `login(user, token)` → `navigate('/home')` | Done |
-| `src/pages/MyLibraryPage.jsx` | `/library` | Placeholder | Stub |
+| `src/pages/ProfilePage.jsx` | `/profile` | Protected; loads the current profile (404 → empty form), edits `bio`/`avatarUrl`, live avatar preview, saves via `updateProfile`, error/success banners | Done |
+| `src/pages/MyLibraryPage.jsx` | `/library` | Placeholder (protected by `PrivateRoute`) | Stub |
 | `src/pages/CommunityPage.jsx` | `/community` | Placeholder | Stub |
 
 `/` redirects to `/home` with `replace`.
@@ -56,10 +57,12 @@ Root: `Frontend/`
 | --- | --- | --- |
 | `src/components/GameCard.jsx` | Reusable game card (image, rating, year, link) | Done |
 | `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend | Done |
-| `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`) | Done |
+| `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token) | Done |
+| `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
 | `src/contexts/authContext.js` | Raw `AuthContext` (`createContext`) | Done |
-| `src/contexts/AuthContext.jsx` | `AuthProvider`: holds current user; `login(user, token)` stores `user_Data` + `token`; `try/catch` self-heal if stored JSON is corrupt; `login` throws if user missing; `logout` clears both keys | Done |
+| `src/contexts/AuthContext.jsx` | `AuthProvider`: holds current user; `login(user, token)` stores `user_Data` + `token`; `try/catch` self-heal if stored JSON is corrupt; `login` throws if user missing; `logout` clears both keys; boot `useEffect` validates the session via `getCurrentUser` (refresh on 200, logout on 401 only); `loading` initialized from the stored token and set false when boot validation finishes | Done |
 | `src/hooks/useAuth.js` | `useAuth()` — `useContext(AuthContext)` | Done |
+| `src/routes/PrivateRoute.jsx` | Route guard: `loading` → placeholder; no `user` → `<Navigate to="/login" replace />`; otherwise `<Outlet />` | Done |
 | `src/assets/register.jpg` | Background image for the login/register pages | Done |
 
 ### Config
@@ -90,7 +93,8 @@ Root: `Backend/`
 | `.../entity/User.java` | Maps to `users` table | Done |
 | `.../repository/UserRepository.java` | `findByEmail`, `existsByEmail` | Done |
 | `.../dto/RegisterRequest.java` | Registration input + validation | Done |
-| `.../dto/RegisterResponse.java` | Response without password hash | Done |
+| `.../dto/RegisterResponse.java` | Response without password hash; `getid()` renamed to `getId()` (2026-10-18) — Jackson 3 ignored the non-standard name and silently dropped `id` from JSON | Done |
+| `.../controllers/UserController.java` | `GET /api/users/me` — reads principal from SecurityContext, returns `RegisterResponse` (`id`/`userName`/`email`) | Done |
 | `.../dto/LoginRequest.java` | Login input + validation | Done |
 | `.../dto/AuthResponse.java` | `{ token, user }` response body for register/login | Done |
 | `.../services/UserService.java` | Register (hash + save) and login (verify) logic | Done |
@@ -102,10 +106,19 @@ Root: `Backend/`
 | Game endpoints (`/api/games`, `/api/games-name`, `/api/games/{id}`, `/api/games/{id}/screenshots`) | Proxy RAWG through Spring Boot | Done |
 | `resources/db/migration/V1__create_users_table.sql` | Creates `users` table | Done |
 | `resources/application.properties` | DB config, `ddl-auto=none`, RAWG key from env, JWT config (`jwt.secret`, `jwt.expiration-ms`) | Done |
-| `.../config/SecurityConfig.java` | `SecurityFilterChain`: public game/auth paths `permitAll`, rest `authenticated`, stateless, CSRF off; `CorsConfigurationSource` bean (origin 5173, `/api/**`); 401 JSON entry point | Done |
+| `.../config/SecurityConfig.java` | `SecurityFilterChain`: public game/auth paths `permitAll`, rest `authenticated`, stateless, CSRF off; `CorsConfigurationSource` bean (origin 5173, `/api/**`) wired explicitly via `.cors(cors -> cors.configurationSource(...))`; 401 JSON entry point; JWT filter registered via `addFilterBefore` | Done |
 | `.../services/JwtService.java` | Sign (`generateToken`) and verify (`parseToken`) HS256 tokens | Done |
 | Pom dependencies | `spring-boot-starter-security` + jjwt 0.12.6 (`jjwt-api`/`jjwt-impl`/`jjwt-gson`) | Done |
-| JWT auth wiring (token issued + stored; no request filter, no protected endpoint yet) | Persistent authentication | Partial |
+| `.../security/JwtAuthenticationFilter.java` | Reads `Authorization: Bearer`, parses via `JwtService`, loads user via `UserService.findById`, sets `SecurityContextHolder`; fail-safe on invalid token; registered in `SecurityConfig` via `addFilterBefore` | Done |
+| `.../services/UserService.java` (`findById`) | Delegates to `userRepository.findById`, returns `Optional<User>` | Done |
+| JWT auth wiring (token issued, stored, verified server-side, and attached by the frontend) | Persistent authentication | Done |
+| `.../entity/Profile.java` | Maps to `profiles` table; `@OneToOne` + `@JoinColumn(name = "user_id")` to `User`; `bio`, `avatarUrl`, `createdAt`; getters/setters/constructors | Done |
+| `.../repository/ProfileRepository.java` | Extends `JpaRepository<Profile, Long>`; `findByUserId(Long)` → `Optional<Profile>` | Done |
+| `resources/db/migration/V2__create_profiles_table.sql` | Creates `profiles` table: `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at` | Done |
+| `.../dto/ProfileRequest.java` | Profile input DTO (`bio`, `avatarUrl`) + no-arg/all-arg constructors, getters/setters | Done |
+| `.../dto/ProfileResponse.java` | Profile output DTO (`id`, `userId`, `bio`, `avatarUrl`, `createdAt`) + getters | Done |
+| `.../services/ProfileService.java` | `getProfileUserById` (delegates to `findByUserId`); `saveProfile` create-or-update with `@Transactional` | Done |
+| `.../controllers/ProfileController.java` | `GET /api/profile/me` (200 or 404) and `PUT /api/profile/me` (upsert); reads the principal from the SecurityContext | Done |
 
 ### Backend check
 
@@ -120,13 +133,16 @@ cd Backend
 
 | Method | Path | Status |
 | --- | --- | --- |
-| GET | `/api/hello` | Done — protected: 401 `{"message":"Unauthorized"}` without token |
+| GET | `/api/hello` | Done — protected: 401 without token; 200 with a greeting read from the SecurityContext principal (`Wellcome, <username>`) |
 | GET | `/api/games` | Done |
 | GET | `/api/games-name?name=` | Done |
 | GET | `/api/games/{id}` | Done |
 | GET | `/api/games/{id}/screenshots` | Done |
 | POST | `/api/auth/register` | Done — returns `{ token, user }` (201) |
 | POST | `/api/auth/login` | Done — returns `{ token, user }` |
+| GET | `/api/users/me` | Done — requires valid token; returns `id`/`userName`/`email` |
+| GET | `/api/profile/me` | Done — requires valid token; returns the current user's profile, 404 if none exists |
+| PUT | `/api/profile/me` | Done — requires valid token; creates or updates the current user's profile |
 
 ---
 
@@ -135,6 +151,7 @@ cd Backend
 | Object | Details | Status |
 | --- | --- | --- |
 | `users` table (`V1__create_users_table.sql`) | `id`, `username` (unique), `email` (unique), `password_hash`, `created_at` | Done |
+| `profiles` table (`V2__create_profiles_table.sql`) | `id`, `user_id` (FK → `users.id`, unique, cascade delete), `bio`, `avatar_url`, `created_at` | Done |
 
 Migrations are managed by Flyway. Create a new migration for any schema change — do not
 edit applied migrations.
@@ -158,10 +175,20 @@ edit applied migrations.
 | Games | Explore list / search / detail / screenshots | Working (manual) |
 | Auth | Login/register response includes `token` + nested `user` | Working (manual) — 2026-10-18 |
 | Auth | `GET /api/hello` without token | HTTP 401 `{"message":"Unauthorized"}` (curl) |
+| Auth | `GET /api/hello` with valid Bearer token | Success — HTTP 200; filter console printed user id + loaded username (manual, 2026-10-18) |
+| Auth | `GET /api/hello` with garbage token | HTTP 401, no crash (fail-safe catch, manual, 2026-10-18) |
+| Auth | `GET /api/users/me` with valid token | Success — `{"id":2,"userName":"Reth Chhaiya","email":...}` after the `getId()` fix (curl, 2026-10-18) |
+| Auth | `GET /api/users/me` without token | HTTP 401 (curl, 2026-10-18) |
+| Auth | `/me` JSON missing `id` | Bug found — `getid()` ignored by Jackson 3; fixed by renaming to `getId()` (2026-10-18) |
+| Auth | Boot validation wrote `user_data` (lowercase d) | Bug found in review — wrong localStorage key; fixed to `user_Data` (2026-10-18) |
 | Auth | Browser login after `SecurityConfig` (CORS preflight) | Fixed — global `CorsConfigurationSource` bean |
 | Auth | Boot crash on corrupt `localStorage` (`"undefined"`) | Fixed — `try/catch` self-heal in `AuthProvider` |
-| Frontend | `npm run lint` | Passing |
-| Frontend | `npm run build` | Passing |
+| Profile | `PUT /api/profile/me` (create) | Success — 200, returns `id`/`userId`/`bio`/`avatarUrl`/`createdAt` (PowerShell, 2026-10-19) |
+| Profile | `GET /api/profile/me` after save | Success — returns the saved profile (PowerShell, 2026-10-19) |
+| Profile | `GET /api/profile/me` without token | HTTP 401 (design) |
+| CORS | Preflight `OPTIONS /api/users/me` with `Origin: http://localhost:5173` | Fixed — `Access-Control-Allow-Origin` present after explicit `configurationSource` wiring (2026-10-19) |
+| Frontend | `npm run lint` | Passing (0 errors, 2026-10-19) |
+| Frontend | `npm run build` | Passing — 45 modules |
 | Backend | `mvnw.cmd clean compile` | Passing |
 | Backend | Compile after adding Spring Security + jjwt | Passing |
 
@@ -223,12 +250,72 @@ edit applied migrations.
   `SecurityContextHolder`, `UsernamePasswordAuthenticationToken(principal, credentials,
   authorities)`, `chain.doFilter` as pass-the-ball.
 - Exercise 1 assigned: create `security/JwtAuthenticationFilter.java` (`@Component`,
-  extends `OncePerRequestFilter`, injects `JwtService`, passthrough `doFilterInternal`
-  + Bearer header extraction with null/prefix guards). **Not started — no filter code
-  in the repository yet.**
-- Resume point: write the skeleton → compile → then populate the SecurityContext and
-  register the filter in `SecurityConfig` via
-  `addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)`.
+  extends `OncePerRequestFilter`, injects `JwtService`, passthrough
+  `doFilterInternal` + Bearer header extraction with null/prefix guards).
+- Completed the same day — see the next entry.
+
+### 2026-10-18 — JWT filter: authenticated identity (Increment 3, backend)
+
+- Built `security/JwtAuthenticationFilter.java` incrementally: header guard → extract
+  `Bearer ` token → `jwtService.parseToken` → `UserService.findById` →
+  `SecurityContextHolder.setAuthentication(...)`; invalid token fails safe (catch
+  `JwtException`, continue unauthenticated).
+- Added `UserService.findById` (delegates to `userRepository.findById`, returns
+  `Optional<User>` — first `existsById` was written by mistake: boolean yes/no vs the
+  actual entity).
+- Registered the filter in `SecurityConfig` with
+  `.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)`
+  so it runs inside the security chain, before the authorization check.
+- Bugs fixed along the way: `doFilterInteral` typo (`@Override` caught it at compile
+  time), missing `chain.doFilter` on the happy path (request died silently), bare
+  `catch{` (Java requires a typed parameter).
+- Verified (manual): valid token → `GET /api/hello` 200 + console prints user id and
+  loaded username; no token → 401; garbage token → 401 with no crash.
+- Remaining for Phase 3: `GET /api/users/me`, frontend attaches `Authorization`,
+  protected React routes.
+
+### 2026-10-18 — `/api/users/me` + frontend session validation
+
+- Backend: `UserController` with `GET /api/users/me` — reads the principal from the
+  SecurityContext (same pattern as the `/hello` exercise) and returns `RegisterResponse`.
+- `/api/hello` upgraded to greet the authenticated user (`Wellcome, <username>`) —
+  used as the independent exercise for reading the SecurityContext.
+- Debugging: `/me` JSON was missing `id` — `RegisterResponse.getid()` doesn't follow
+  the JavaBean getter convention, so Jackson 3 silently ignored it. Renamed to
+  `getId()`; register/login responses now include `id` too.
+- Frontend: `authService.getCurrentUser()` (GET `/users/me` with `Bearer` token from
+  localStorage); `AuthProvider` boot `useEffect` validates the session — refreshes the
+  stored user on 200, logs out only on 401 (network errors do not sign the user out).
+- Bug found in review: the effect wrote the fresh user to `user_data` (lowercase d)
+  while everything else reads `user_Data` — fixed; silent two-slots bug, same family
+  as the earlier `login(token, user)` argument-order bug.
+- Pending verification when work resumes: browser re-test of boot validation after the
+  key fix (login → hard refresh → `GET /api/users/me` 200 + current Navbar name;
+  garbage token → logged out); `npm run lint` + `npm run build` re-check.
+- Remaining for Phase 3: protected-route guard for `/library`; attach `Authorization`
+  on future feature calls (library, reviews).
+
+### 2026-10-19 — Phase 3 complete + Phase 4 kickoff
+
+- Phase 3 finished: `loading` state added to `AuthProvider` (true until boot validation resolves via `finally`); `PrivateRoute.jsx` created (loading → placeholder, no user → redirect `/login` with `replace`, otherwise `<Outlet/>`); `/library` wrapped in `PrivateRoute` inside `MainLayout`.
+- Knowledge check passed: loading-before-user reasoning; frontend guard = UX, backend = security.
+- Phase 4 decision: **separate `profiles` table** (Option B) over adding columns to `users` — cleaner separation of auth data vs display data.
+- Flyway `V2__create_profiles_table.sql`: one-to-one FK (`UNIQUE` + `ON DELETE CASCADE`). Debugging during build: trailing comma, `REFERENCES user(id)` → `users(id)` (table name confusion).
+- `Profile.java` entity: fixed column name typos (`boi` → `bio`, `avartar_url` → `avatar_url`), `LocalTime` → `LocalDateTime`, added missing `@OneToOne`, added getters/setters/constructors + `getCreatedAt()`.
+- `ProfileRepository.java`: fixed `JpaRepository<User, Long>` → `JpaRepository<Profile, Long>` (wrong entity type would hit the wrong table).
+- Verified: `mvnw.cmd clean compile` passing; `profiles` table visible in database after migration.
+- Remaining for Phase 4: DTOs, service, controller (`GET/PUT /api/profile/me`), frontend profile page.
+
+### 2026-10-19 — Phase 4 complete: user profiles (backend + frontend)
+
+- Backend: `ProfileRequest` / `ProfileResponse` DTOs; `ProfileService` (`getProfileUserById`, `saveProfile` create-or-update with `@Transactional`); `ProfileController` (`GET /api/profile/me` → 200 or 404, `PUT /api/profile/me` → upsert). Reads the authenticated principal from the SecurityContext (same pattern as `UserController`).
+- Verified with PowerShell: `PUT` created the profile (`id=1`, `userId=2`) and `GET` returned it.
+- CORS debugging: `OPTIONS /api/users/me` from the Vite origin was blocked while `/api/games` worked — the `@CrossOrigin` annotations on the game/auth/hello controllers masked the issue. The global bean was not applied by `.cors(Customizer.withDefaults())`; fixed by injecting `CorsConfigurationSource` and wiring explicitly: `.cors(cors -> cors.configurationSource(corsConfigurationSource))`. Preflight now returns `Access-Control-Allow-Origin: http://localhost:5173`.
+- Removed the temporary profile `permitAll` matchers — profile endpoints stay behind authentication.
+- Frontend: `profileService.js` (`getProfile` → `null` on 404; `updateProfile`; both attach `Authorization`), `ProfilePage.jsx` (load/edit, live avatar preview, save, error/success banners, "Member since"), `/profile` route inside `PrivateRoute`, Profile link in the Navbar.
+- Bugs fixed: the form used `handleSubmit={...}` instead of `onSubmit={...}` → native submit reloaded the page and reset the avatar preview; the mobile Navbar Profile link was in the logged-out branch; `response === 404` → `response.status === 404`; wrong/unused imports.
+- Lint: fixed `react-hooks/set-state-in-effect` in `AuthProvider` by initializing `loading` from the stored token and returning early when there is no token.
+- Verified: `mvnw.cmd clean compile`, `npm run lint` (0 errors), `npm run build` (45 modules); profile PUT/GET tested against the running backend.
 
 ### Earlier
 
@@ -240,9 +327,7 @@ edit applied migrations.
 
 ## Not Built Yet
 
-- Persistent authentication: token is issued and stored, but there is **no request filter yet** — the backend never reads the `Authorization` header, so no endpoint accepts a token, and the frontend doesn't attach it.
-- Protected routes/endpoints (`GET /api/users/me` planned).
-- User profiles.
+- `Authorization` header on future feature calls (library, reviews) — `getCurrentUser` and `profileService` show the pattern.
 - Personal game library (add/remove, statuses).
 - Reviews.
 - Community posts, likes, comments.

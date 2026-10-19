@@ -7,6 +7,8 @@ import CommunityPage from "../pages/CommunityPage";
 import LoginPage from "../pages/LoginPage";
 import RegisterPage from "../pages/RegisterPage";
 import MainLayout from "../components/layouts/MainLayout";
+import PrivateRoute from "./PrivateRoute";
+import ProfilePage from "../pages/ProfilePage";
 
 function AppRoute() {
   return (
@@ -18,12 +20,18 @@ function AppRoute() {
         <Route path="/" element={<Navigate to={"/home"} replace />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/explore" element={<ExplorePage />} />
-        <Route path="/library" element={<MyLibraryPage />} />
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/game/:id" element={<GameDetailsPage />} />
-        
-        
+
+        {/* Protect route */}
+        <Route element={<PrivateRoute />}>
+          <Route path="/library" element={<MyLibraryPage />} />
+          <Route path="/profile" element={<ProfilePage/>} />
+          
+        </Route>
       </Route>
+
+      {/* Protect route */}
     </Routes>
   );
 }
