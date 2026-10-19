@@ -871,3 +871,4 @@ Objective: become capable of designing, implementing, debugging, and explaining 
 | 2026-10-19 | Spring — bean discovery vs explicit wiring | `.cors(Customizer.withDefaults())` relied on discovering the bean and silently skipped it; `.cors(cors -> cors.configurationSource(bean))` is explicit | Explicit is predictable — the same idea as passing a function instead of hoping something is found. |
 | 2026-10-19 | React — prop names are the contract | `handleSubmit={...}` is just an unknown prop on `<form>`; only `onSubmit` wires the handler | A wrong prop name fails silently and the native submit reloads the page, wiping state. |
 | 2026-10-19 | React — `setState` in effects | React 19 lint rejects synchronous `setState` in an effect body; initialize state from `localStorage` instead and update in promise callbacks | Avoids cascading renders; effects should sync with external systems, not derive initial state. |
+
