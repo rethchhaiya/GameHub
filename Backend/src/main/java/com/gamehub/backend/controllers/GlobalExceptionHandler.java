@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.gamehub.backend.exception.EmailAlreadyExistsException;
+import com.gamehub.backend.exception.GameAlreadyInLibraryException;
 import com.gamehub.backend.exception.InvalidCredentialsException;
+import com.gamehub.backend.exception.ResourceNotFoundException;
 
 @RestControllerAdvice 
 public class GlobalExceptionHandler {
@@ -44,5 +46,23 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                              .body(Map.of("message", exception.getMessage())); 
+    }
+
+    @ExceptionHandler(GameAlreadyInLibraryException.class)
+    public ResponseEntity <Map<String, String>> handleGameAlreadyInLibrary(GameAlreadyInLibraryException exception){
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                             .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity <Map<String, String>> handleResourceNotFound(ResourceNotFoundException exception){
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                             .body(Map.of("message", exception.getMessage()));
+    } 
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity <Map<String, String>> handleIllegalArgument(IllegalArgumentException exception){
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", exception.getMessage()));
     }
 }

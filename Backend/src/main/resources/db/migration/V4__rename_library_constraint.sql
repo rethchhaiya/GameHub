@@ -1,0 +1,1 @@
+    ALTER TABLE library_entries RENAME CONSTRAINT uq_library_entiries_user_game TO uq_library_entries_user_game;
