@@ -223,7 +223,7 @@ Conceptual entities discussed for GameHub. Only the entities below were planned;
 | --- | --- | --- |
 | User | Account and credentials | Implemented |
 | User profile | Profile data and gaming info | Implemented |
-| Game reference or cached game info | Optional local reference to external games | Planned, conditional |
+| Game reference or cached game info | Optional local reference to external games | Decided 2026-10-20: no dedicated table — entries store `rawg_id` + cached display fields |
 | Personal game library entry | Links a user to a game with a status | Planned |
 | Review | A user review of a game | Planned |
 | Community post | A user post | Planned |
@@ -434,7 +434,7 @@ Acceptance criteria:
 - Remove an entry.
 - Entries are scoped to the authenticated user.
 
-Completion status: Not started.
+Completion status: In progress (started 2026-10-20) — game-reference decision made (RAWG id + cached display fields, no games table); `V3__create_library_entries_table.sql` applied (author-written): `library_entries` with `rawg_id` INTEGER, cached `game_name`/`game_image`, `status` CHECK on the four enum values, composite `UNIQUE (user_id, rawg_id)`. Entity/repository/DTOs/service/controller and the React page not built yet.
 
 ### Phase 6 — Reviews
 
@@ -676,7 +676,7 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | Registration (`POST /api/auth/register`) | Completed, tested | controllers/AuthController.java, services/UserService.java, dto/RegisterRequest.java |
 | Login credential verification (`POST /api/auth/login`) | Completed, tested | controllers/AuthController.java, dto/LoginRequest.java |
 | BCrypt password hashing | Completed | config/PasswordConfig.java |
-| Validation + exception handling (400/401/409) | Completed | dto annotations, controllers/GlobalExceptionHandler.java, execption/InvalidCredentialsException.java, execption/EmailAlreadyExistsException.java |
+| Validation + exception handling (400/401/409) | Completed | dto annotations, controllers/GlobalExceptionHandler.java, exception/InvalidCredentialsException.java, exception/EmailAlreadyExistsException.java |
 | CORS for the Vite dev origin | Completed | `CorsConfigurationSource` bean in `config/SecurityConfig.java` (origin 5173, `/api/**`), wired explicitly with `.cors(cors -> cors.configurationSource(...))`; legacy `@CrossOrigin` remains on some controllers |
 | External game API (RAWG) integration | Completed | game endpoints used by the frontend |
 | JWT — sign/verify (`JwtService`) + config | Completed | services/JwtService.java, application.properties (`jwt.secret`, `jwt.expiration-ms`) |
@@ -696,7 +696,7 @@ Observed notes:
 - The backend uses package `com.gamehub.backend` with `controllers`, `services`, `entity`, `repository`, `dto`, `config`, and `exception` subpackages.
 - Login/register now return `AuthResponse` (`{ token, user }`); the nested user still serializes as `id`/`userName`/`email` because the inner DTO's getters are unchanged. Renaming `RegisterResponse` to a general `UserResponse` would improve clarity (not urgent).
 - `RegisterResponse` getter names determine the JSON keys Jackson emits, but only when they follow the JavaBean convention: `getId()` → `id`, `getUserName()` → `userName` (capital N), `getEmail()` → `email`. The old `getid()` was silently ignored by Jackson 3 — `id` was missing from `/me`, register, and login JSON until it was renamed (2026-10-18). The frontend Navbar therefore reads `user.userName`. The entity uses the conventional `getUsername()`; aligning the DTO getter (or adding `@JsonProperty("username")`) would make the key `username`.
-- The exception classes live in a misspelled package folder `execption/` while declaring `package com.gamehub.backend.exception`; `PasswordConfig.java` sits in the root package rather than a `config/` package. Cosmetic, not refactored.
+- The exception classes' package folder used to be misspelled `execption/`; renamed to `exception/` on 2026-10-20 (folder + package statements + imports moved together after a half-applied rename broke the compile — the lesson: a package rename is atomic). `PasswordConfig.java` sits in the root package rather than a `config/` package. Cosmetic, not refactored.
 - The .env file was committed to git and then untracked (commit caea6b0). Secrets remain in history; rotating them may be advisable. This is Open.
 
 ---
@@ -707,7 +707,7 @@ Open decisions:
 
 - External game API: RAWG is confirmed and integrated. The API key is stored server-side (env variable) and not committed.
 - Auth architecture: Spring Security + JWT implemented and verified — stateless filter chain, `JwtService` (HS256), token issuance and request validation, explicit CORS wiring, 401 entry point, protected routes. Still open: refresh-token strategy (single 24h access token is the current choice).
-- Game references: store only external ids with cached display fields, or store a local game record for libraries and reviews. Still open.
+- Game references: decided (2026-10-20) — **Option A**: store the external RAWG id plus cached display fields (`game_name`, `game_image`) on each library entry; no local `games` table. Details re-fetch from RAWG when needed. Reviews (Phase 6) will reuse the same pattern unless they outgrow it.
 - Profile model: decided (2026-10-19) — separate `profiles` table (one-to-one with `users`) and a `Profile` entity. Implemented.
 - Reviews: whether edit/delete is in the MVP or right after. Still open.
 - Likes/reactions: which content types can be liked. Still open.
@@ -746,7 +746,7 @@ These are ideas only. They must not block MVP completion.
 ## 17. Immediate Next Steps
 
 1. Phase 4 is complete (2026-10-19): profiles work end to end (backend + React page), protected routes guard `/library` and `/profile`, and `profileService` shows the pattern for attaching `Authorization` — reuse it for library/review calls.
-2. Next: Phase 5 (personal game library). First decide the game-reference strategy (external RAWG id + cached display fields vs a local game record) — still Open (section 15).
+2. Next: Phase 5 (personal game library) is underway. Game-reference decision made (2026-10-20): external RAWG id + cached display fields, no `games` table; `library_entries` schema applied via V3. Next steps: entity → repository → DTOs → service → controller, then the React `/library` page.
 3. Keep .env untracked and consider rotating any secrets already committed.
 
 ---
@@ -784,6 +784,7 @@ These are ideas only. They must not block MVP completion.
 | 27 | Model profiles as a separate `profiles` table (one-to-one via `user_id`) | Keep auth data (`users`) separate from display data; `UNIQUE` + `ON DELETE CASCADE` | Implemented (2026-10-19) |
 | 28 | Wire the CORS bean explicitly with `.cors(cors -> cors.configurationSource(...))` | `Customizer.withDefaults()` silently failed to apply the bean; explicit wiring guarantees the filter uses it | Implemented (2026-10-19) |
 | 29 | Keep profile endpoints authenticated and read the user from the SecurityContext | The token already identifies the user; the client should not supply a user id | Implemented (2026-10-19) |
+| 30 | Reference games by external RAWG id + cached display fields (`rawg_id`, `game_name`, `game_image`); no local `games` table | The library grid only needs name + image, which RAWG already serves; avoids an extra entity/repo/service layer for proxied data | Implemented in V3 (2026-10-20) |
 
 This table is the reference for future sessions. Do not change decision 8 (Option C) or the MVP-first strategy without an explicit new decision.
 

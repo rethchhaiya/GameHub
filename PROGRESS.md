@@ -3,7 +3,7 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -99,9 +99,9 @@ Root: `Backend/`
 | `.../dto/AuthResponse.java` | `{ token, user }` response body for register/login | Done |
 | `.../services/UserService.java` | Register (hash + save) and login (verify) logic | Done |
 | `.../controllers/AuthController.java` | `POST /api/auth/register`, `POST /api/auth/login` — both return `AuthResponse` (`{ token, user }`) via injected `JwtService` | Done |
-| `.../controllers/GlobalExceptionHandler.java` | Maps errors to 400/401/409 | Done |
-| `.../execption/InvalidCredentialsException.java` | Invalid login credentials (package folder is misspelled `execption`) | Done |
-| `.../execption/EmailAlreadyExistsException.java` | Duplicate email | Done |
+| `.../controllers/GlobalExceptionHandler.java` | Maps errors to 400 (`MethodArgumentNotValidException`, `IllegalArgumentException`), 401, 404 (`ResourceNotFoundException`), 409 | Done |
+| `.../exception/InvalidCredentialsException.java` | Invalid login credentials | Done |
+| `.../exception/EmailAlreadyExistsException.java` | Duplicate email | Done |
 | `.../PasswordConfig.java` | `BCryptPasswordEncoder` bean (root package, not a `config/` package) | Done |
 | Game endpoints (`/api/games`, `/api/games-name`, `/api/games/{id}`, `/api/games/{id}/screenshots`) | Proxy RAWG through Spring Boot | Done |
 | `resources/db/migration/V1__create_users_table.sql` | Creates `users` table | Done |
@@ -119,6 +119,15 @@ Root: `Backend/`
 | `.../dto/ProfileResponse.java` | Profile output DTO (`id`, `userId`, `bio`, `avatarUrl`, `createdAt`) + getters | Done |
 | `.../services/ProfileService.java` | `getProfileUserById` (delegates to `findByUserId`); `saveProfile` create-or-update with `@Transactional` | Done |
 | `.../controllers/ProfileController.java` | `GET /api/profile/me` (200 or 404) and `PUT /api/profile/me` (upsert); reads the principal from the SecurityContext | Done |
+| `.../entity/LibraryEntry.java` | Maps to `library_entries`; `@ManyToOne`/`@JoinColumn` → `User`, `rawgId`, `gameName`, `gameImage`, `status`, `@CreationTimestamp` on `addedAt`; full getters/setters, no-id args ctor | Done |
+| `.../repository/LibraryEntryRepository.java` | `findByUserId` → `List`, `existsByUserIdAndRawgId`, `findByUserIdAndRawgId` (derived queries traverse `user.id`) | Done |
+| `.../dto/LibraryRequest.java` | Input DTO (`rawgId`, `gameName`, `gameImage`, `status`) + validation; no `userId`/`addedAt` — identity is principal-only, timestamp is `@CreationTimestamp`-owned | Done |
+| `.../dto/LibraryResponse.java` | Output DTO (`id`, flat `userId`, `rawgId`, `gameName`, `gameImage`, `status`, `addedAt`) — flat `Long userId` so the `User` entity (and `passwordHash`) never enters JSON | Done |
+| `.../services/LibraryService.java` | `addToLibrary` (validates status against a `Set` whitelist → `IllegalArgumentException`; duplicate pair → `GameAlreadyInLibraryException`), `getLibrary`, `updateStatus`/`deleteEntry` via shared `getOwnedEntry` (missing **or not-owned** → `ResourceNotFoundException` — 404, not 403, to avoid confirming a foreign id exists) | Done |
+| `.../dto/StatustUpdateRequest.java` | Tiny body DTO for status updates (`@NotBlank status`) — validates exactly what PUT reads, unlike `LibraryRequest` which would force rawgId/gameName along; ⚠ class name typo `Statust` — pending atomic rename (file + class + ctors + controller import) | Done (rename pending) |
+| `.../controllers/LibraryController.java` | `GET /api/library` (200, `[]` when empty), `POST /api/library` (201 + `@Valid` body), `PUT /api/library/{id}` (path var + `@Valid` body → 200), `DELETE /api/library/{id}` (204, no body); identity via `@AuthenticationPrincipal User user`; shared `toResponse` mapper | Done |
+| `.../exception/GameAlreadyInLibraryException.java` | Duplicate `(user_id, rawg_id)` pair → 409 | Done |
+| `.../exception/ResourceNotFoundException.java` | Missing/unowned resource → 404 | Done |
 
 ### Backend check
 
@@ -143,6 +152,10 @@ cd Backend
 | GET | `/api/users/me` | Done — requires valid token; returns `id`/`userName`/`email` |
 | GET | `/api/profile/me` | Done — requires valid token; returns the current user's profile, 404 if none exists |
 | PUT | `/api/profile/me` | Done — requires valid token; creates or updates the current user's profile |
+| GET | `/api/library` | Done — implemented, 200 with mapped DTOs (`[]` when empty); runtime check pending |
+| POST | `/api/library` | Done — implemented, `@Valid` body → 201 with the new entry; client-asserted identity forbidden, principal-only |
+| PUT | `/api/library/{id}` | Done — implemented (`@PathVariable` id + `@Valid` status body → 200); runtime check pending |
+| DELETE | `/api/library/{id}` | Done — implemented (→ 204 no body; missing/unowned entry → 404 via service); runtime check pending |
 
 ---
 
@@ -152,6 +165,8 @@ cd Backend
 | --- | --- | --- |
 | `users` table (`V1__create_users_table.sql`) | `id`, `username` (unique), `email` (unique), `password_hash`, `created_at` | Done |
 | `profiles` table (`V2__create_profiles_table.sql`) | `id`, `user_id` (FK → `users.id`, unique, cascade delete), `bio`, `avatar_url`, `created_at` | Done |
+| `library_entries` table (`V3__create_library_entries_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `game_name`, `game_image` (TEXT), `status` (CHECK: PLAYING/COMPLETED/PLAN_TO_PLAY/DROPPED), `added_at`, composite `UNIQUE (user_id, rawg_id)` — file later fixed (duplicate name + `entiries` spelling) with the DB checksum re-synced via `flyway:repair` | Done |
+| rename library constraint (`V4__rename_library_constraint.sql`) | `ALTER TABLE ... RENAME CONSTRAINT uq_library_entiries_user_game TO uq_library_entries_user_game` — the live constraint now has the correct name; DB is at Flyway version 4 | Done |
 
 Migrations are managed by Flyway. Create a new migration for any schema change — do not
 edit applied migrations.
@@ -190,7 +205,11 @@ edit applied migrations.
 | Frontend | `npm run lint` | Passing (0 errors, 2026-10-19) |
 | Frontend | `npm run build` | Passing — 45 modules |
 | Backend | `mvnw.cmd clean compile` | Passing |
-| Backend | Compile after adding Spring Security + jjwt | Passing |
+| Database | V3 migration applied at backend startup ("Successfully applied 1 migration: V3"); `library_entries` visible in the database | Done (manual, 2026-10-20) |
+| Database | edited V3 → app startup fails "Migration checksum mismatch for migration version 3" (expected burn); `flyway:repair` re-synced the checksum, `flyway:migrate` applied V4, `flyway:validate` → 4/4 pass | Done (flyway-maven-plugin, 2026-10-20) |
+| Backend | app boots clean after V4 — validates 4 migrations, Tomcat on :8080 | Done (manual, 2026-10-20) |
+| Backend | `mvnw.cmd clean compile` after renaming the exception package folder `execption` → `exception` (git mv, matching package statements + imports) | Passing (2026-10-20) |
+| Backend | `mvnw.cmd clean compile` with the library slice complete (all four `/api/library` endpoints, status DTO, exceptions, handlers) | Passing — 36 sources (2026-10-20) |
 
 ---
 
@@ -317,6 +336,75 @@ edit applied migrations.
 - Lint: fixed `react-hooks/set-state-in-effect` in `AuthProvider` by initializing `loading` from the stored token and returning early when there is no token.
 - Verified: `mvnw.cmd clean compile`, `npm run lint` (0 errors), `npm run build` (45 modules); profile PUT/GET tested against the running backend.
 
+### 2026-10-20 — Phase 5 kickoff: library schema
+
+- Decided the open game-reference question: **Option A — RAWG id + cached display fields** on each library entry (`rawg_id` + `game_name` + `game_image`); no `games` table. Details re-fetched from RAWG when needed; reviews can reuse the same pattern.
+- `V3__create_library_entries_table.sql` written by the author (first migration authored without a template), reviewed twice, then applied at startup — `library_entries` table live.
+- Bugs caught in review (teaching points): unquoted status values (identifiers vs strings), missing values in the CHECK, stray `finish` word, missing `CONSTRAINT` keyword, `"DROPED"` spelling, double-vs-single quotes in Postgres (double = identifier, single = string), `VARCHAR(255)` on `game_image` → `TEXT` (RAWG URLs overflow 255; Postgres has no perf difference between TEXT and VARCHAR).
+- Concepts learned: composite UNIQUE (the **pair** `(user_id, rawg_id)` is the key — many users × many games, no duplicates); named constraints surface error 23505; `GENERATED BY DEFAULT AS IDENTITY` as the modern alternative to `BIGSERIAL`.
+- Remaining Phase 5: `LibraryEntry` entity → repository → DTOs → service → controller (`GET/POST/PUT/DELETE /api/library`, principal-based) → React `/library` page.
+- Known cosmetic debt: ~~constraint name typo `uq_library_entiries_user_game`~~ — resolved same day via `flyway:repair` + `V4__rename_library_constraint.sql` (below).
+
+### 2026-10-20 — Flyway repair + V4 rename + exception package cleanup
+
+- Fixed V3's on-disk syntax bug (duplicated constraint name — would crash any fresh database) and corrected the `entiries` → `entries` spelling; since V3 was already applied, the next run trips the exact checksum-mismatch guard the rule was designed to enforce, then reconciles honestly: `flyway:repair` (bookkeeping only — rewrites the recorded checksum), `flyway:migrate` applies `V4__rename_library_constraint.sql` (`RENAME CONSTRAINT` for the live typo'd name), `flyway:validate` → 4/4. DB at version 4.
+- Added `flyway-maven-plugin` (no `<version>`; Boot parent manages it). Credentials passed via `-Dflyway.configFiles=<temp conf>` — the Reject: Neon `DB_URL` contains `&channel_binding=require`, and batch-parse rules in `mvnw.cmd` split args at `&` (symptoms: `user 'null'`, `'channel_binding' is not recognized as a command`).
+- Finished the exception-package rename started earlier: folder `execption` → `exception` via `git mv` (package statements + imports had already been edited; the folder lagging was why `UserService` blew up at boot with ECJ's signature `Unresolved compilation problems`). `mvnw clean compile` deletes the stale IDE-compiled classes from `target/`; re-verified passing.
+- Docs updated (PROGRESS.md, plan.md, AGENTS.md).
+
+### 2026-10-20 — Phase 5: library backend, entity → controller (in progress)
+
+- Whole vertical slice authored by the user, built through two coaching rounds (review propone
+  → fix → re-review): `LibraryEntry` entity → `LibraryEntryRepository` → `LibraryRequest`/
+  `LibraryResponse` DTOs → `LibraryService` → two new exceptions + handlers → `LibraryController`
+  (GET + POST implemented; PUT/DELETE pending).
+- Teaching decisions made along the way:
+  - **One user → many entries** — first draft named the row entity `Library` and had
+    `Optional<Library> findByUserId`; renamed to `LibraryEntry` and the repository got `List`
+    semantics (the composite `UNIQUE (user_id, rawg_id)` says the collection is the point).
+  - **Identity is never client-asserted** — the draft's `LibraryRequest` contained `userId`
+    (and `addedAt`); both dropped: principal from SecurityContext only, `@CreationTimestamp`
+    owns `added_at`.
+  - `LibraryResponse` flat `Long userId` — serializing the `User` entity would leak
+    `passwordHash` (Jackson 3 getter rule).
+  - Status whitelist lives in the service (`Set` of the 4 CHECK values → `IllegalArgumentException`/
+    400) so a bad value fails clean before hitting the DB CHECK.
+  - Controller: GET maps via stream + `toResponse` helper (200 even when empty — an empty
+    library is not 404); POST is `@Valid` → 201 CREATED; identity via
+    `@AuthenticationPrincipal User user`.
+- Bugs caught in review: `PLAN TO PLAY` (space) vs the CHECK's `PLAN_TO_PLAY` — whitelist
+  rejected the only correct value; derived-query camelCase (`exsitByUserIdandRawdId`-style
+  typos) — Spring Data needs exact `UserIdAndRawgId` paths; DTO Jackson contract (no-arg ctor
+  + getters/setters); `@ManyToOne` + `@Column` (relationships take `@JoinColumn`); missing
+  `@Entity` in the first entity draft; IDE ghost imports (`java.net.Authenticator`,
+  `ajcDeclareAnnotation`) from autocomplete; GET first written with `Optional`-style `.map/.orElseThrow`
+  on a `List` (compile error, then the empty-list ≠ 404 design call); response arity missing
+  `status`.
+- Latent bug found in survey: `ProfileController.updateProfile` takes `@RequestBody
+  ProfileRequest` **without `@Valid`** — profile validation never runs; one-word fix, still open
+  (also flagged: use the same `@Valid` habit on every new endpoint).
+- `GlobalExceptionHandler` gained 409/404/400-`IllegalArgumentException` mappings.
+- Statuses: entity/repo/DTOs/service Done; controller Partial (PUT/DELETE `/api/library/{id}`
+  next); nothing runtime-verified yet — next stop is `spring-boot:run` + curl round-trip
+  (201 → duplicate 409 → GET 200) into the live Neon DB.
+- PUT arrived after three teaching rounds on the same theme — one annotation = one data source:
+  `@PathVariable` (URL segment) vs `@RequestBody` (JSON body) vs `@Valid` (not a source — a trigger);
+  first draft had all three stacked on `Long id` and none on the body DTO (bare, unannotated params
+  silently fall back to form/query binding → `null` body at runtime, the nastiest bug class of the
+  session). Plus the recurring `user.getId()/user` call-site déjà vu, then the tiny status-only DTO
+  (reusing `LibraryRequest` would force rawgId/gameName along for a status tweak).
+- DELETE was pure recall by then: `204 noContent`, no body, identity from the principal.
+- Session close state: all four endpoints compile (36 sources). Runtime round-trip (201 →
+  duplicate 409 → GET 200 → PUT 200 → DELETE 204) not yet executed — **that's the next session's
+  first task**.
+- Small debts parked for next session (do before runtime testing):
+  - Atomic rename `StatustUpdateRequest` → `StatusUpdateRequest` (file + class + both ctors +
+    controller import, in one edit — the `execption` lesson).
+  - GET still inlines the element mapping; swap to `.stream().map(this::toResponse).toList()`.
+  - Stray `@Valid` on the PUT's `@PathVariable Long id` (no-op on a bare Long) — delete.
+  - `ProfileController.updateProfile` still missing `@Valid` (latent, one word).
+- Verified: `mvnw.cmd clean compile`
+
 ### Earlier
 
 - Frontend game discovery UI (ExplorePage, GameDetailsPage, GameCard, gameService).
@@ -327,8 +415,8 @@ edit applied migrations.
 
 ## Not Built Yet
 
-- `Authorization` header on future feature calls (library, reviews) — `getCurrentUser` and `profileService` show the pattern.
-- Personal game library (add/remove, statuses).
+- `Authorization` header on future feature calls (reviews) — `getCurrentUser` and `profileService` show the pattern.
+- Personal game library — **backend code Done** (all four endpoints compile); **runtime verification pending** (curl round-trip against Neon: 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204); parked debts: `StatustUpdateRequest` rename, GET→helper swap, stray `@Valid` on the path variable, `ProfileController` missing `@Valid`; the `/library` page not built yet.
 - Reviews.
 - Community posts, likes, comments.
 - Automated feature tests (backend and frontend).
