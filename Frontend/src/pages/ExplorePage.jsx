@@ -120,7 +120,7 @@ function ExplorePage() {
 
         {/* Empty state */}
         {!loading && !error && games.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-16 text-center">
+          <div className="rounded-2xl border border-dashed border-white/10 bg-[#0c0e13] px-6 py-16 text-center">
             <p className="mb-3 text-4xl text-lime-400">⌕</p>
 
             <h2 className="text-xl font-semibold">

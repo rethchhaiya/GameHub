@@ -15,6 +15,8 @@ import com.gamehub.backend.entity.Profile;
 import com.gamehub.backend.entity.User;
 import com.gamehub.backend.services.ProfileService;
 
+import jakarta.validation.Valid;
+
 @RestController 
 @RequestMapping("/api/profile")
 public class ProfileController {
@@ -43,7 +45,7 @@ public class ProfileController {
     }
 
     @PutMapping("/me")
-    public ResponseEntity<ProfileResponse> updateProfile(@RequestBody ProfileRequest request){
+    public ResponseEntity<ProfileResponse> updateProfile(@Valid @RequestBody ProfileRequest request){
         //Get logged-in user
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         User user = (User) auth.getPrincipal();

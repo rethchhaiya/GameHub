@@ -29,7 +29,7 @@ Architecture in one line:
 
 React frontend → Spring Boot REST API → PostgreSQL database, with the Spring Boot backend also calling an external game API when game data is needed.
 
-Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users` and `profiles` tables exist), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The social/library features are not built yet. Details are in section 14.
+Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users`, `profiles`, and `library_entries` tables exist), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The personal game library is implemented end to end in code — `library_entries` schema (V3/V4), entity/repository/DTOs/service/controller, a React `/library` page, and an add-to-library card on the game details page — but its runtime round-trip has not been executed yet. Reviews and the community/social features are not built. Details are in section 14.
 
 ---
 
@@ -224,7 +224,7 @@ Conceptual entities discussed for GameHub. Only the entities below were planned;
 | User | Account and credentials | Implemented |
 | User profile | Profile data and gaming info | Implemented |
 | Game reference or cached game info | Optional local reference to external games | Decided 2026-10-20: no dedicated table — entries store `rawg_id` + cached display fields |
-| Personal game library entry | Links a user to a game with a status | Planned |
+| Personal game library entry | Links a user to a game with a status | Implemented (2026-10-21) |
 | Review | A user review of a game | Planned |
 | Community post | A user post | Planned |
 | Comment | A comment on a post | Planned |
@@ -254,7 +254,7 @@ This is an Open decision (section 15). The plan is to avoid creating unnecessary
 ### Proposed vs confirmed schema
 
 - Proposed schema decisions: all entities and relationships in this section are proposed based on the planning discussion.
-- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). No other entity exists in code yet.
+- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). The `library_entries` table exists (Flyway `V3__create_library_entries_table.sql` + `V4__rename_library_constraint.sql`, mapped by `LibraryEntry`) with `id`, `user_id` (FK → `users.id`, `ON DELETE CASCADE`), `rawg_id`, cached `game_name`/`game_image`, `status` (CHECK), `added_at`, and `UNIQUE (user_id, rawg_id)`; a user has many entries. Library endpoints exist but their runtime round-trip is pending. No review, post, comment, or like entity exists in code yet.
 
 ---
 
@@ -434,7 +434,13 @@ Acceptance criteria:
 - Remove an entry.
 - Entries are scoped to the authenticated user.
 
-Completion status: In progress (started 2026-10-20) — game-reference decision made (RAWG id + cached display fields, no games table); `V3__create_library_entries_table.sql` applied (author-written): `library_entries` with `rawg_id` INTEGER, cached `game_name`/`game_image`, `status` CHECK on the four enum values, composite `UNIQUE (user_id, rawg_id)`. Entity/repository/DTOs/service/controller and the React page not built yet.
+Completion status: Completed in code (2026-10-21) — runtime round-trip pending.
+
+- Game-reference decision (2026-10-20): RAWG id + cached display fields, no `games` table.
+- Schema: `V3__create_library_entries_table.sql` (applied) — `library_entries` with `rawg_id` INTEGER, cached `game_name`/`game_image`, `status` CHECK on the four values, composite `UNIQUE (user_id, rawg_id)`; `V4__rename_library_constraint.sql` fixed the constraint name.
+- Backend: `LibraryEntry` entity, `LibraryEntryRepository`, `LibraryRequest`/`LibraryResponse`/`StatusUpdateRequest` DTOs, `LibraryService` (principal-scoped, status whitelist, 404 for missing/unowned, `@Transactional`), `LibraryController` (`GET`/`POST /api/library`, `PUT`/`DELETE /api/library/{id}`).
+- Frontend: `libraryService.js`, `libraryStatuses.js`, `/library` page (list, status update, inline delete confirmation, loading/error/empty states), add-to-library card on the details page.
+- Verified: `mvnw.cmd clean compile`, `npm run lint`, `npm run build`. The live add → duplicate 409 → list → status → delete round-trip is still pending.
 
 ### Phase 6 — Reviews
 
@@ -527,7 +533,8 @@ The backend owns GameHub data and proxies external game data. Rows marked Curren
 | Current profile | GET | /api/profile/me | PostgreSQL | Current (requires token; 404 if none exists) |
 | Update profile | PUT | /api/profile/me | PostgreSQL | Current (requires token; creates or updates) |
 | Public profile | GET | /api/users/{id} | PostgreSQL | Planned |
-| Library | GET/POST/PUT/DELETE | /api/library | PostgreSQL | Planned |
+| Library | GET/POST | /api/library | PostgreSQL | Current — backend implemented; `/library` page + add-to-library card built; runtime round-trip pending |
+| Library entry | PUT/DELETE | /api/library/{id} | PostgreSQL | Current — status update / delete, principal-scoped; runtime round-trip pending |
 | Reviews | GET/POST/PUT/DELETE | /api/reviews | PostgreSQL | Planned |
 | Posts | GET/POST | /api/posts | PostgreSQL | Planned |
 | Comments | GET/POST | /api/posts/{id}/comments | PostgreSQL | Planned |
@@ -591,7 +598,7 @@ Planned approach:
 
 Current evidence:
 
-- Backend: registration and login were manually tested (correct credentials, wrong password 401, unknown email 401, duplicate email 409, validation 400). Profile `PUT` (create) and `GET` were manually verified, and the CORS preflight was checked with curl (2026-10-19). Only a context-load test (BackendApplicationTests, contextLoads) exists as automation.
+- Backend: registration and login were manually tested (correct credentials, wrong password 401, unknown email 401, duplicate email 409, validation 400). Profile `PUT` (create) and `GET` were manually verified, and the CORS preflight was checked with curl (2026-10-19). The library endpoints compile but have not been exercised against the live database yet. Only a context-load test (BackendApplicationTests, contextLoads) exists as automation.
 - Frontend: no test setup configured in package.json; features have been verified manually in the browser.
 - Frontend CI checks in use: `npm run lint` (ESLint) and `npm run build` (Vite) both pass.
 
@@ -649,13 +656,17 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | API service layer (list, search, detail, screenshots) | Completed | services/gameService.js |
 | Auth service layer (`registerUser`, `loginUser`, `getCurrentUser`) | Completed | services/authService.js (`getCurrentUser` calls `/api/users/me` with the stored token) |
 | Profile service layer (`getProfile`, `updateProfile`) | Completed | services/profileService.js — attaches `Authorization`, treats 404 as "no profile yet" |
+| Library service layer (`getLibrary`, `addToLibrary`, `updateStatus`, `deleteFromLibrary`) | Completed | services/libraryService.js — attaches `Authorization`, handles `204`, normalizes errors |
+| Library status options | Completed | constants/libraryStatuses.js — shared by the library page and the details-page add card |
 | Auth context + provider + `useAuth` hook | Completed | contexts/authContext.js, contexts/AuthContext.jsx, hooks/useAuth.js; boot `useEffect` validates the session via `getCurrentUser` (refreshes `user_Data` on 200, logs out on 401 only); exposes `loading` (true until boot validation finishes) |
 | Auth state mounted app-wide | Completed | main.jsx wraps `<App/>` in `<AuthProvider>` |
 | Navbar auth state (shows user name + Logout) | Completed | components/layouts/Navbar.jsx (reads `user.userName`, calls `logout`) |
 | LoginPage (`/login`) — form wired to `POST /api/auth/login` | Completed | pages/LoginPage.jsx (destructures `{ token, user }` → `login(user, token)` → `navigate('/home')`) |
 | RegisterPage (`/register`) — form wired to `POST /api/auth/register` | Completed | pages/RegisterPage.jsx (destructures `{ token, user }` → `login(user, token)` → `navigate('/home')`) |
 | ProfilePage (`/profile`) — view/edit own profile | Completed | pages/ProfilePage.jsx (loads via `getProfile`, saves via `updateProfile`, live avatar preview, error/success banners) |
-| MyLibraryPage / CommunityPage | Placeholder only | pages/MyLibraryPage.jsx, pages/CommunityPage.jsx (empty stubs; `/library` is protected by `PrivateRoute`) |
+| MyLibraryPage (`/library`) — list, status update, delete | Completed | pages/MyLibraryPage.jsx (loading/error/empty states, status `<select>` → PUT, inline delete confirmation, busy guard) |
+| Add to library on the details page | Completed | pages/GameDetailsPage.jsx — status select + "Add to library", 409 / signed-out handling |
+| CommunityPage | Placeholder only | pages/CommunityPage.jsx (empty stub) |
 | Protected route guard (`PrivateRoute`) | Completed | routes/PrivateRoute.jsx — `loading` → placeholder, no `user` → `<Navigate to="/login" replace />`, else `<Outlet/>`; wired to `/library` and `/profile` in routes/index.jsx (2026-10-19) |
 | Routing | Completed | `/` redirects to `/home`; `/home`, `/explore`, `/library` (protected), `/profile` (protected), `/community`, `/game/:id`, `/login`, `/register` |
 | Frontend calls backend | Completed | fetch calls in gameService.js |
@@ -668,9 +679,12 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | Scaffold (Spring Boot 4.1.1, Java 21) | Current | pom.xml |
 | dotenv loading of .env | Current | BackendApplication.java |
 | PostgreSQL config (Neon, env vars, ddl-auto=none) | Completed | application.properties, .env |
-| Flyway migrations | Completed | V1__create_users_table.sql, V2__create_profiles_table.sql |
+| Flyway migrations | Completed | V1__create_users_table.sql, V2__create_profiles_table.sql, V3__create_library_entries_table.sql, V4__rename_library_constraint.sql |
 | `users` table | Completed | Flyway V1 |
 | `profiles` table | Completed | Flyway V2 — `user_id` FK → `users(id)`, `UNIQUE`, `ON DELETE CASCADE` (2026-10-19) |
+| `library_entries` table | Completed | Flyway V3 — `user_id` FK, `rawg_id`, cached `game_name`/`game_image`, status CHECK, `UNIQUE (user_id, rawg_id)`; V4 renamed the constraint (2026-10-20) |
+| Library entity/repository/DTOs/service | Completed | entity/LibraryEntry.java, repository/LibraryEntryRepository.java, dto/LibraryRequest.java, dto/LibraryResponse.java, dto/StatusUpdateRequest.java, services/LibraryService.java |
+| `LibraryController` | Completed (runtime round-trip pending) | controllers/LibraryController.java — `GET`/`POST /api/library`, `PUT`/`DELETE /api/library/{id}` (2026-10-21) |
 | `User` entity + `UserRepository` | Completed | entity/, repository/ |
 | `Profile` entity + `ProfileRepository` | Completed | entity/Profile.java (`@OneToOne` + `@JoinColumn(name = "user_id")`), repository/ProfileRepository.java (`findByUserId`) (2026-10-19) |
 | Registration (`POST /api/auth/register`) | Completed, tested | controllers/AuthController.java, services/UserService.java, dto/RegisterRequest.java |
@@ -686,7 +700,7 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | Profile DTOs (`ProfileRequest`, `ProfileResponse`) | Completed | `dto/ProfileRequest.java` (input: `bio`, `avatarUrl`), `dto/ProfileResponse.java` (output: `id`, `userId`, `bio`, `avatarUrl`, `createdAt`) |
 | `ProfileService` | Completed | `services/ProfileService.java` — `getProfileUserById`, `saveProfile` create-or-update with `@Transactional` |
 | `ProfileController` | Completed, tested | `controllers/ProfileController.java` — `GET`/`PUT /api/profile/me`, reads the principal (2026-10-19) |
-| Protected endpoints | Completed | `GET /api/hello`, `GET /api/users/me`, and `GET/PUT /api/profile/me` accept a valid token (200) and reject without one (401) |
+| Protected endpoints | Completed | `GET /api/hello`, `GET /api/users/me`, `GET/PUT /api/profile/me`, and all `/api/library` endpoints accept a valid token (200) and reject without one (401) |
 | Automated feature tests | Not started | only contextLoads |
 | `mvnw.cmd clean compile` | Passing | verified by author |
 
@@ -746,8 +760,9 @@ These are ideas only. They must not block MVP completion.
 ## 17. Immediate Next Steps
 
 1. Phase 4 is complete (2026-10-19): profiles work end to end (backend + React page), protected routes guard `/library` and `/profile`, and `profileService` shows the pattern for attaching `Authorization` — reuse it for library/review calls.
-2. Next: Phase 5 (personal game library) is underway. Game-reference decision made (2026-10-20): external RAWG id + cached display fields, no `games` table; `library_entries` schema applied via V3. Next steps: entity → repository → DTOs → service → controller, then the React `/library` page.
-3. Keep .env untracked and consider rotating any secrets already committed.
+2. Phase 5 (personal game library) is implemented end to end in code (2026-10-21): `library_entries` schema (V3/V4), backend endpoints, `/library` page, and the add-to-library card on the details page. First task: runtime-verify the round-trip against Neon (201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204).
+3. Then Phase 6 (reviews), reusing the RAWG-id + cached-display-fields game-reference pattern.
+4. Keep .env untracked and consider rotating any secrets already committed.
 
 ---
 

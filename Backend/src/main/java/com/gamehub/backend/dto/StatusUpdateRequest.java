@@ -2,13 +2,13 @@ package com.gamehub.backend.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public class StatustUpdateRequest {
+public class StatusUpdateRequest {
     @NotBlank(message = "Status is required")
     private String status;
 
-    public StatustUpdateRequest(){}
+    public StatusUpdateRequest(){}
 
-    public StatustUpdateRequest(String status){
+    public StatusUpdateRequest(String status){
         this.status = status;
     }
 

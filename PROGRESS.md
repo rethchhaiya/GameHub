@@ -3,7 +3,7 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -42,11 +42,11 @@ Root: `Frontend/`
 | --- | --- | --- | --- |
 | `src/pages/HomePage.jsx` | `/home` | Hero, CTA to Explore, three feature cards | Done |
 | `src/pages/ExplorePage.jsx` | `/explore` | Game grid, search by name, loading/error/empty states | Done |
-| `src/pages/GameDetailsPage.jsx` | `/game/:id` | Details, genres/devs/publishers/platforms, screenshot lightbox (Esc/close) | Done |
+| `src/pages/GameDetailsPage.jsx` | `/game/:id` | Redesigned hero + two-column layout; details, genres/devs/publishers/platforms; screenshot gallery + lightbox (arrows, Esc, click-out); "Your library" card (status select → `addToLibrary`, 409 + signed-out states) | Done |
 | `src/pages/LoginPage.jsx` | `/login` | Login form → `loginUser` → destructure `{token, user}` → `login(user, token)` → `navigate('/home')`; error display | Done |
 | `src/pages/RegisterPage.jsx` | `/register` | Register form + confirm-password check → `registerUser` → `login(user, token)` → `navigate('/home')` | Done |
 | `src/pages/ProfilePage.jsx` | `/profile` | Protected; loads the current profile (404 → empty form), edits `bio`/`avatarUrl`, live avatar preview, saves via `updateProfile`, error/success banners | Done |
-| `src/pages/MyLibraryPage.jsx` | `/library` | Placeholder (protected by `PrivateRoute`) | Stub |
+| `src/pages/MyLibraryPage.jsx` | `/library` | Protected; loads entries, loading/error/empty states, per-entry status `<select>` → PUT, inline delete confirmation, busy guard | Done |
 | `src/pages/CommunityPage.jsx` | `/community` | Placeholder | Stub |
 
 `/` redirects to `/home` with `replace`.
@@ -55,8 +55,10 @@ Root: `Frontend/`
 
 | File | What it does | Status |
 | --- | --- | --- |
-| `src/components/GameCard.jsx` | Reusable game card (image, rating, year, link) | Done |
+| `src/components/GameCard.jsx` | Redesigned reusable card: artwork overlay, rating/Metacritic badges, ratings count, year, up to two genres, hover CTA | Done |
 | `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend | Done |
+| `src/services/libraryService.js` | `getLibrary`, `addToLibrary` (POST), `updateStatus` (PUT), `deleteFromLibrary` (DELETE; handles 204); attach `Authorization`; normalized errors with `status`/`fieldErrors` | Done |
+| `src/constants/libraryStatuses.js` | Single source for the four status `{ value, label }` options (library page + details page) | Done |
 | `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token) | Done |
 | `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
 | `src/contexts/authContext.js` | Raw `AuthContext` (`createContext`) | Done |
@@ -118,14 +120,14 @@ Root: `Backend/`
 | `.../dto/ProfileRequest.java` | Profile input DTO (`bio`, `avatarUrl`) + no-arg/all-arg constructors, getters/setters | Done |
 | `.../dto/ProfileResponse.java` | Profile output DTO (`id`, `userId`, `bio`, `avatarUrl`, `createdAt`) + getters | Done |
 | `.../services/ProfileService.java` | `getProfileUserById` (delegates to `findByUserId`); `saveProfile` create-or-update with `@Transactional` | Done |
-| `.../controllers/ProfileController.java` | `GET /api/profile/me` (200 or 404) and `PUT /api/profile/me` (upsert); reads the principal from the SecurityContext | Done |
+| `.../controllers/ProfileController.java` | `GET /api/profile/me` (200 or 404) and `PUT /api/profile/me` (upsert, `@Valid` body since 2026-10-21); reads the principal from the SecurityContext | Done |
 | `.../entity/LibraryEntry.java` | Maps to `library_entries`; `@ManyToOne`/`@JoinColumn` → `User`, `rawgId`, `gameName`, `gameImage`, `status`, `@CreationTimestamp` on `addedAt`; full getters/setters, no-id args ctor | Done |
-| `.../repository/LibraryEntryRepository.java` | `findByUserId` → `List`, `existsByUserIdAndRawgId`, `findByUserIdAndRawgId` (derived queries traverse `user.id`) | Done |
+| `.../repository/LibraryEntryRepository.java` | `findByUserId` → `List`, `existsByUserIdAndRawgId` (derived queries traverse `user.id`); unused `findByUserIdAndRawgId` removed 2026-10-21 | Done |
 | `.../dto/LibraryRequest.java` | Input DTO (`rawgId`, `gameName`, `gameImage`, `status`) + validation; no `userId`/`addedAt` — identity is principal-only, timestamp is `@CreationTimestamp`-owned | Done |
 | `.../dto/LibraryResponse.java` | Output DTO (`id`, flat `userId`, `rawgId`, `gameName`, `gameImage`, `status`, `addedAt`) — flat `Long userId` so the `User` entity (and `passwordHash`) never enters JSON | Done |
-| `.../services/LibraryService.java` | `addToLibrary` (validates status against a `Set` whitelist → `IllegalArgumentException`; duplicate pair → `GameAlreadyInLibraryException`), `getLibrary`, `updateStatus`/`deleteEntry` via shared `getOwnedEntry` (missing **or not-owned** → `ResourceNotFoundException` — 404, not 403, to avoid confirming a foreign id exists) | Done |
-| `.../dto/StatustUpdateRequest.java` | Tiny body DTO for status updates (`@NotBlank status`) — validates exactly what PUT reads, unlike `LibraryRequest` which would force rawgId/gameName along; ⚠ class name typo `Statust` — pending atomic rename (file + class + ctors + controller import) | Done (rename pending) |
-| `.../controllers/LibraryController.java` | `GET /api/library` (200, `[]` when empty), `POST /api/library` (201 + `@Valid` body), `PUT /api/library/{id}` (path var + `@Valid` body → 200), `DELETE /api/library/{id}` (204, no body); identity via `@AuthenticationPrincipal User user`; shared `toResponse` mapper | Done |
+| `.../services/LibraryService.java` | `@Transactional` writes; `addToLibrary` (validates status against `ALLOWED_STATUSES` → `IllegalArgumentException`; duplicate pair → `GameAlreadyInLibraryException`), `getLibrary`, `updateStatus`/`deleteEntry` via shared `getOwnedEntry` (missing **or not-owned** → `ResourceNotFoundException` — 404, not 403, to avoid confirming a foreign id exists) | Done |
+| `.../dto/StatusUpdateRequest.java` | Tiny body DTO for status updates (`@NotBlank status`) — validates exactly what PUT reads, unlike `LibraryRequest` which would force rawgId/gameName along; renamed from `StatustUpdateRequest` on 2026-10-21 (file + class + ctors + controller import) | Done |
+| `.../controllers/LibraryController.java` | `GET /api/library` (SecurityContext principal; 200, `[]` when empty; `.stream().map(this::toResponse)`), `POST /api/library` (201 + `@Valid` body), `PUT /api/library/{id}` (path var + `@Valid` status body → 200), `DELETE /api/library/{id}` (204, no body); mutations use `@AuthenticationPrincipal User user`; shared `toResponse` mapper | Done |
 | `.../exception/GameAlreadyInLibraryException.java` | Duplicate `(user_id, rawg_id)` pair → 409 | Done |
 | `.../exception/ResourceNotFoundException.java` | Missing/unowned resource → 404 | Done |
 
@@ -210,6 +212,8 @@ edit applied migrations.
 | Backend | app boots clean after V4 — validates 4 migrations, Tomcat on :8080 | Done (manual, 2026-10-20) |
 | Backend | `mvnw.cmd clean compile` after renaming the exception package folder `execption` → `exception` (git mv, matching package statements + imports) | Passing (2026-10-20) |
 | Backend | `mvnw.cmd clean compile` with the library slice complete (all four `/api/library` endpoints, status DTO, exceptions, handlers) | Passing — 36 sources (2026-10-20) |
+| Backend | `mvnw.cmd clean compile` after the parked debt fixes (`StatusUpdateRequest` rename, `@Valid` on the PUT body, `toResponse` GET mapping, `@Transactional` on `updateStatus`, dead repo method removed, `ProfileController` `@Valid`) | Passing (2026-10-21) |
+| Frontend | `npm run lint` + `npm run build` after the library page, add-to-library card, GameCard/GameDetailsPage redesigns, and inline delete confirmation | Passing — 47 modules (2026-10-21) |
 
 ---
 
@@ -405,6 +409,16 @@ edit applied migrations.
   - `ProfileController.updateProfile` still missing `@Valid` (latent, one word).
 - Verified: `mvnw.cmd clean compile`
 
+### 2026-10-21 — Library frontend + detail/card redesign
+
+- Closed the parked backend debts: `StatustUpdateRequest` → `StatusUpdateRequest` (file, class, both ctors, controller import, in one commit-ready change); GET mapping swapped to `.stream().map(this::toResponse)`; stray `@Valid` removed from the PUT `@PathVariable` and placed on the `@RequestBody`; `@Transactional` added to `updateStatus`; unused `findByUserIdAndRawgId` removed; `ALLOWED_STATIC` → `ALLOWED_STATUSES`; `ProfileController.updateProfile` now uses `@Valid`.
+- `libraryService.js` added: `getLibrary`, `addToLibrary` (POST), `updateStatus` (PUT `/library/{id}`), `deleteFromLibrary` (DELETE, handles `204`); all attach `Authorization` and normalize errors with `status`/`fieldErrors`.
+- `libraryStatuses.js` shared constant for the four status values; the import casing was corrected to lowercase `libraryService` (Windows resolves either case, Linux does not).
+- `MyLibraryPage` built: load on mount, loading/error/empty states, per-entry status `<select>` (state replaced with the server response), remove with inline confirmation, `busyId` guard preventing overlapping mutations.
+- `GameDetailsPage` redesigned: hero with backdrop/gradient + meta chips, two-column body, accessible screenshot gallery and lightbox (arrows, counter, Esc/click-out), skeleton loading state. Added the "Your library" card: signed-out prompt, status select + add button, 409 → "already in your library", success → link to `/library`.
+- `GameCard` redesigned: artwork overlay, rating/Metacritic badges, ratings count, year, up to two genre chips, hover "View details" CTA.
+- Verified: `npm run lint`, `npm run build` (47 modules), `mvnw.cmd clean compile`. Library runtime round-trip (add → duplicate 409 → GET → PUT → DELETE) still pending.
+
 ### Earlier
 
 - Frontend game discovery UI (ExplorePage, GameDetailsPage, GameCard, gameService).
@@ -416,7 +430,7 @@ edit applied migrations.
 ## Not Built Yet
 
 - `Authorization` header on future feature calls (reviews) — `getCurrentUser` and `profileService` show the pattern.
-- Personal game library — **backend code Done** (all four endpoints compile); **runtime verification pending** (curl round-trip against Neon: 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204); parked debts: `StatustUpdateRequest` rename, GET→helper swap, stray `@Valid` on the path variable, `ProfileController` missing `@Valid`; the `/library` page not built yet.
+- Personal game library — **code Done end to end** (backend endpoints, `libraryService.js`, `/library` page, add-to-library card on the details page); **runtime verification pending** (curl/browser round-trip against Neon: 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204).
 - Reviews.
 - Community posts, likes, comments.
 - Automated feature tests (backend and frontend).

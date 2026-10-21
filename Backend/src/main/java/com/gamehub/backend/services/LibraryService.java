@@ -16,7 +16,7 @@ import com.gamehub.backend.repository.LibraryEntryRepository;
 @Service 
 public class LibraryService {
 
-    private static final Set<String> ALLOWED_STATIC = Set.of(
+    private static final Set<String> ALLOWED_STATUSES = Set.of(
             "PLAYING", "COMPLETED", "PLAN_TO_PLAY", "DROPPED");
     private final LibraryEntryRepository libraryRepository;
 
@@ -44,6 +44,7 @@ public class LibraryService {
     }
 
     //update
+    @Transactional 
     public LibraryEntry updateStatus(Long entryId, User user, String status){
         validateStatus(status);
         //get library
@@ -57,7 +58,7 @@ public class LibraryService {
 
     //check status
     private void validateStatus(String status){
-        if(!ALLOWED_STATIC.contains(status)){
+        if(!ALLOWED_STATUSES.contains(status)){
             throw new IllegalArgumentException("Invalid status:" + status);
         }
     }

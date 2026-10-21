@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.gamehub.backend.dto.LibraryRequest;
 import com.gamehub.backend.dto.LibraryResponse;
-import com.gamehub.backend.dto.StatustUpdateRequest;
+import com.gamehub.backend.dto.StatusUpdateRequest;
 import com.gamehub.backend.entity.LibraryEntry;
 import com.gamehub.backend.entity.User;
 import com.gamehub.backend.services.LibraryService;
@@ -43,21 +43,16 @@ public class LibraryController {
         User user = (User) auth.getPrincipal();
         
         List<LibraryResponse> responses = libraryService.getLibrary(user.getId())
-                    .stream().map(library -> new LibraryResponse(
-                    library.getId(),
-                    library.getUser().getId(),
-                    library.getRawgId(),
-                    library.getGameName(),
-                    library.getGameImage(),
-                    library.getStatus(),
-                    library.getAddedAt()
-                )).toList();
+                    .stream()
+                    .map(this::toResponse)
+                    .toList();
 
         return ResponseEntity.ok(responses);
     }
 
     @PostMapping
-    public ResponseEntity<LibraryResponse> addToLibrary(@AuthenticationPrincipal User user,@Valid @RequestBody LibraryRequest request){
+    public ResponseEntity<LibraryResponse> addToLibrary(@AuthenticationPrincipal User user,
+        @Valid @RequestBody LibraryRequest request){
         
         LibraryEntry entry = libraryService.addToLibrary(user, request);
 
@@ -65,7 +60,8 @@ public class LibraryController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<LibraryResponse> updateLibrary(@AuthenticationPrincipal User user, @Valid @PathVariable Long id, @RequestBody StatustUpdateRequest request){
+    public ResponseEntity<LibraryResponse> updateLibrary(@AuthenticationPrincipal User user,
+        @PathVariable Long id,@Valid @RequestBody StatusUpdateRequest request){
         
         LibraryEntry entry = libraryService.updateStatus(id, user, request.getStatus());
         
@@ -73,7 +69,8 @@ public class LibraryController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteFromLibrary(@AuthenticationPrincipal User user, @PathVariable Long id){
+    public ResponseEntity<Void> deleteFromLibrary(@AuthenticationPrincipal User user, 
+        @PathVariable Long id){
         libraryService.deleteEntry(id, user);
 
         return ResponseEntity.noContent().build();
