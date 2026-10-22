@@ -29,7 +29,7 @@ Architecture in one line:
 
 React frontend → Spring Boot REST API → PostgreSQL database, with the Spring Boot backend also calling an external game API when game data is needed.
 
-Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users`, `profiles`, and `library_entries` tables exist), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The personal game library is implemented end to end in code — `library_entries` schema (V3/V4), entity/repository/DTOs/service/controller, a React `/library` page, and an add-to-library card on the game details page — but its runtime round-trip has not been executed yet. Reviews and the community/social features are not built. Details are in section 14.
+Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users`, `profiles`, and `library_entries` tables exist), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The personal game library is complete — `library_entries` schema (V3/V4), entity/repository/DTOs/service/controller, a React `/library` page, and an add-to-library card on the game details page — and its runtime round-trip was verified by the author (2026-10-21 night). Reviews and the community/social features are not built. Details are in section 14.
 
 ---
 
@@ -254,7 +254,7 @@ This is an Open decision (section 15). The plan is to avoid creating unnecessary
 ### Proposed vs confirmed schema
 
 - Proposed schema decisions: all entities and relationships in this section are proposed based on the planning discussion.
-- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). The `library_entries` table exists (Flyway `V3__create_library_entries_table.sql` + `V4__rename_library_constraint.sql`, mapped by `LibraryEntry`) with `id`, `user_id` (FK → `users.id`, `ON DELETE CASCADE`), `rawg_id`, cached `game_name`/`game_image`, `status` (CHECK), `added_at`, and `UNIQUE (user_id, rawg_id)`; a user has many entries. Library endpoints exist but their runtime round-trip is pending. No review, post, comment, or like entity exists in code yet.
+- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). The `library_entries` table exists (Flyway `V3__create_library_entries_table.sql` + `V4__rename_library_constraint.sql`, mapped by `LibraryEntry`) with `id`, `user_id` (FK → `users.id`, `ON DELETE CASCADE`), `rawg_id`, cached `game_name`/`game_image`, `status` (CHECK), `added_at`, and `UNIQUE (user_id, rawg_id)`; a user has many entries. Library endpoints are implemented and runtime-verified (2026-10-21 night). No review, post, comment, or like entity exists in code yet.
 
 ---
 
@@ -434,13 +434,13 @@ Acceptance criteria:
 - Remove an entry.
 - Entries are scoped to the authenticated user.
 
-Completion status: Completed in code (2026-10-21) — runtime round-trip pending.
+Completion status: Completed (2026-10-21) — runtime round-trip verified by the author (2026-10-21 night): add → 201, duplicate → 409, GET → 200, PUT status → 200, DELETE → 204.
 
 - Game-reference decision (2026-10-20): RAWG id + cached display fields, no `games` table.
 - Schema: `V3__create_library_entries_table.sql` (applied) — `library_entries` with `rawg_id` INTEGER, cached `game_name`/`game_image`, `status` CHECK on the four values, composite `UNIQUE (user_id, rawg_id)`; `V4__rename_library_constraint.sql` fixed the constraint name.
 - Backend: `LibraryEntry` entity, `LibraryEntryRepository`, `LibraryRequest`/`LibraryResponse`/`StatusUpdateRequest` DTOs, `LibraryService` (principal-scoped, status whitelist, 404 for missing/unowned, `@Transactional`), `LibraryController` (`GET`/`POST /api/library`, `PUT`/`DELETE /api/library/{id}`).
 - Frontend: `libraryService.js`, `libraryStatuses.js`, `/library` page (list, status update, inline delete confirmation, loading/error/empty states), add-to-library card on the details page.
-- Verified: `mvnw.cmd clean compile`, `npm run lint`, `npm run build`. The live add → duplicate 409 → list → status → delete round-trip is still pending.
+- Verified: `mvnw.cmd clean compile`, `npm run lint`, `npm run build`. The live add → duplicate 409 → list → status → delete round-trip was executed successfully by the author (2026-10-21 night).
 
 ### Phase 6 — Reviews
 
@@ -533,8 +533,8 @@ The backend owns GameHub data and proxies external game data. Rows marked Curren
 | Current profile | GET | /api/profile/me | PostgreSQL | Current (requires token; 404 if none exists) |
 | Update profile | PUT | /api/profile/me | PostgreSQL | Current (requires token; creates or updates) |
 | Public profile | GET | /api/users/{id} | PostgreSQL | Planned |
-| Library | GET/POST | /api/library | PostgreSQL | Current — backend implemented; `/library` page + add-to-library card built; runtime round-trip pending |
-| Library entry | PUT/DELETE | /api/library/{id} | PostgreSQL | Current — status update / delete, principal-scoped; runtime round-trip pending |
+| Library | GET/POST | /api/library | PostgreSQL | Current — implemented and runtime-verified; `/library` page + add-to-library card built |
+| Library entry | PUT/DELETE | /api/library/{id} | PostgreSQL | Current — status update / delete, principal-scoped; runtime-verified |
 | Reviews | GET/POST/PUT/DELETE | /api/reviews | PostgreSQL | Planned |
 | Posts | GET/POST | /api/posts | PostgreSQL | Planned |
 | Comments | GET/POST | /api/posts/{id}/comments | PostgreSQL | Planned |
@@ -684,7 +684,7 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | `profiles` table | Completed | Flyway V2 — `user_id` FK → `users(id)`, `UNIQUE`, `ON DELETE CASCADE` (2026-10-19) |
 | `library_entries` table | Completed | Flyway V3 — `user_id` FK, `rawg_id`, cached `game_name`/`game_image`, status CHECK, `UNIQUE (user_id, rawg_id)`; V4 renamed the constraint (2026-10-20) |
 | Library entity/repository/DTOs/service | Completed | entity/LibraryEntry.java, repository/LibraryEntryRepository.java, dto/LibraryRequest.java, dto/LibraryResponse.java, dto/StatusUpdateRequest.java, services/LibraryService.java |
-| `LibraryController` | Completed (runtime round-trip pending) | controllers/LibraryController.java — `GET`/`POST /api/library`, `PUT`/`DELETE /api/library/{id}` (2026-10-21) |
+| `LibraryController` | Completed, runtime-verified | controllers/LibraryController.java — `GET`/`POST /api/library`, `PUT`/`DELETE /api/library/{id}` (2026-10-21) |
 | `User` entity + `UserRepository` | Completed | entity/, repository/ |
 | `Profile` entity + `ProfileRepository` | Completed | entity/Profile.java (`@OneToOne` + `@JoinColumn(name = "user_id")`), repository/ProfileRepository.java (`findByUserId`) (2026-10-19) |
 | Registration (`POST /api/auth/register`) | Completed, tested | controllers/AuthController.java, services/UserService.java, dto/RegisterRequest.java |
@@ -760,9 +760,8 @@ These are ideas only. They must not block MVP completion.
 ## 17. Immediate Next Steps
 
 1. Phase 4 is complete (2026-10-19): profiles work end to end (backend + React page), protected routes guard `/library` and `/profile`, and `profileService` shows the pattern for attaching `Authorization` — reuse it for library/review calls.
-2. Phase 5 (personal game library) is implemented end to end in code (2026-10-21): `library_entries` schema (V3/V4), backend endpoints, `/library` page, and the add-to-library card on the details page. First task: runtime-verify the round-trip against Neon (201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204).
-3. Then Phase 6 (reviews), reusing the RAWG-id + cached-display-fields game-reference pattern.
-4. Keep .env untracked and consider rotating any secrets already committed.
+2. Phase 5 (personal game library) is complete (2026-10-21): `library_entries` schema (V3/V4), backend endpoints, `/library` page, and the add-to-library card on the details page; the runtime round-trip (201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204) was verified by the author. Next: Phase 6 (reviews), reusing the RAWG-id + cached-display-fields game-reference pattern.
+3. Keep .env untracked and consider rotating any secrets already committed.
 
 ---
 

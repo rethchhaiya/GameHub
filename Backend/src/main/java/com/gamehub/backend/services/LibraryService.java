@@ -17,7 +17,7 @@ import com.gamehub.backend.repository.LibraryEntryRepository;
 public class LibraryService {
 
     private static final Set<String> ALLOWED_STATUSES = Set.of(
-            "PLAYING", "COMPLETED", "PLAN_TO_PLAY", "DROPPED");
+        "PLAYING", "COMPLETED", "PLAN_TO_PLAY", "DROPPED");
     private final LibraryEntryRepository libraryRepository;
 
     public LibraryService(LibraryEntryRepository libraryRepository){

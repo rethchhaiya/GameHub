@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchGameById, fetchGameScreenshots } from "../services/gameService";
 import { addToLibrary } from "../services/libraryService";
+import ReviewSection from "../components/reviews/ReviewSection";
 import { LIBRARY_STATUS_OPTIONS } from "../constants/libraryStatuses";
 import { useAuth } from "../hooks/useAuth";
 
@@ -277,6 +278,8 @@ function GameDetailsPage() {
                 </div>
               )}
             </section>
+
+            <ReviewSection rawgId={Number(id)} />
           </div>
 
           <aside className="space-y-5">

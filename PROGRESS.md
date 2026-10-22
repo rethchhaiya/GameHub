@@ -3,7 +3,7 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-21
+Last updated: 2026-10-22 (Phase 6 reviews backend runtime-verified)
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -61,6 +61,9 @@ Root: `Frontend/`
 | `src/constants/libraryStatuses.js` | Single source for the four status `{ value, label }` options (library page + details page) | Done |
 | `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token) | Done |
 | `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
+| `src/services/reviewService.js` | `getReviewByGame(rawgId)` (GET `/review?rawgId=`), `createReview` (POST), `updateReview` (PUT), `deleteReview` (DELETE with 204 guard → `null`); all attach `Authorization`; normalized errors (`status`/`fieldErrors`) — authored through 4 coaching rounds: headers nesting, correct query-param URL (path vs query lesson), no-swallow error deal (services throw → components catch; catch must rethrow), `JSON.stringify(userData)` single-arg (second arg is a replacer filter), `${reviewId}` template var, 204 no-body guard | Done |
+| `src/components/reviews/ReviewSection.jsx` | Reviews on `/game/:id`: load-on-mount (loading/error/empty/list), signed-out prompt, form (rating select + textarea) for create **and** edit (`editingId` — one form, two jobs), 409/400 error mapping, server-response list updates (add/replace/filter), author-only Edit/Delete with `busyId` guard | Done (code) — not yet browser-tested |
+| `GameDetailsPage.jsx` | Renders `<ReviewSection rawgId={Number(id)} />` after the Screenshots section (main column) | Done |
 | `src/contexts/authContext.js` | Raw `AuthContext` (`createContext`) | Done |
 | `src/contexts/AuthContext.jsx` | `AuthProvider`: holds current user; `login(user, token)` stores `user_Data` + `token`; `try/catch` self-heal if stored JSON is corrupt; `login` throws if user missing; `logout` clears both keys; boot `useEffect` validates the session via `getCurrentUser` (refresh on 200, logout on 401 only); `loading` initialized from the stored token and set false when boot validation finishes | Done |
 | `src/hooks/useAuth.js` | `useAuth()` — `useContext(AuthContext)` | Done |
@@ -130,6 +133,13 @@ Root: `Backend/`
 | `.../controllers/LibraryController.java` | `GET /api/library` (SecurityContext principal; 200, `[]` when empty; `.stream().map(this::toResponse)`), `POST /api/library` (201 + `@Valid` body), `PUT /api/library/{id}` (path var + `@Valid` status body → 200), `DELETE /api/library/{id}` (204, no body); mutations use `@AuthenticationPrincipal User user`; shared `toResponse` mapper | Done |
 | `.../exception/GameAlreadyInLibraryException.java` | Duplicate `(user_id, rawg_id)` pair → 409 | Done |
 | `.../exception/ResourceNotFoundException.java` | Missing/unowned resource → 404 | Done |
+| `.../entity/Review.java` | Maps to `reviews`; IDENTITY id, `@ManyToOne`+`@JoinColumn("user_id")` → `user` (renamed from `userId` per the derived-query lesson), `rawgId`, `rating`, `content`, `@CreationTimestamp` on `createdAt`; Lombok `@Data`/`@NoArgsConstructor` (generates `getCreatedAt()` — fixes the review-round getter debt); `@ToString.Exclude`+`@EqualsAndHashCode.Exclude` on `user` to keep Lombok equals/hashCode from traversing the association | Done |
+| `.../repository/ReviewRepository.java` | `findByUserIdOrderByCreatedAtDesc`, `findByRawgIdOrderByCreatedAtDesc` (newest-first per design), `existsByUserIdAndRawgId` (duplicate guard) | Done |
+| `.../dto/ReviewRequest.java` | Input DTO (`rawgId`, `rating`, `content`) with `@NotNull`/`@Min(1)`/`@Max(5)`/`@NotBlank` on the DTO boundary (not the entity); no `userId` — identity is principal-only | Done |
+| `.../dto/ReviewResponse.java` | Output DTO (`id`, flat `userId`, `rawgId`, `rating`, `content`, `createdAt`) + Lombok no-arg/all-arg | Done |
+| `.../services/ReviewService.java` | `createReview(User user, …)` — duplicate guard (`existsByUserIdAndRawgId` → 409) before save; `getReviewById`, `getAllReviews`, `getReviewByUser`, `getReviewByRawgId`; `updateReview`/`deleteReview` via shared `getOwnedReview` (missing **or not-owned** → 404) — library's house pattern; `toResponse` mapper; principal `User` passed in, no `userRepository` dependency | Done |
+| `.../controllers/ReviewController.java` | `POST /api/review` (201 + `@Valid`), `GET /api/review/{id}`, `GET /api/review` (`?userId=`/`?rawgId=` optional filters), `PUT /api/review/{id}`, `DELETE /api/review/{id}` (204); `@AuthenticationPrincipal User user` on all mutations | Done |
+| `.../exception/ReviewAlreadyExistsException.java` | Duplicate `(user_id, rawg_id)` review → 409 | Done |
 
 ### Backend check
 
@@ -154,10 +164,15 @@ cd Backend
 | GET | `/api/users/me` | Done — requires valid token; returns `id`/`userName`/`email` |
 | GET | `/api/profile/me` | Done — requires valid token; returns the current user's profile, 404 if none exists |
 | PUT | `/api/profile/me` | Done — requires valid token; creates or updates the current user's profile |
-| GET | `/api/library` | Done — implemented, 200 with mapped DTOs (`[]` when empty); runtime check pending |
-| POST | `/api/library` | Done — implemented, `@Valid` body → 201 with the new entry; client-asserted identity forbidden, principal-only |
-| PUT | `/api/library/{id}` | Done — implemented (`@PathVariable` id + `@Valid` status body → 200); runtime check pending |
-| DELETE | `/api/library/{id}` | Done — implemented (→ 204 no body; missing/unowned entry → 404 via service); runtime check pending |
+| GET | `/api/library` | Done — implemented and runtime-verified, 200 with mapped DTOs (`[]` when empty) |
+| POST | `/api/library` | Done — implemented and runtime-verified, `@Valid` body → 201 with the new entry; client-asserted identity forbidden, principal-only |
+| PUT | `/api/library/{id}` | Done — implemented and runtime-verified (`@PathVariable` id + `@Valid` status body → 200) |
+| DELETE | `/api/library/{id}` | Done — implemented and runtime-verified (→ 204 no body; missing/unowned entry → 404 via service) |
+| POST | `/api/review` | Done — runtime-verified 2026-10-22: `@Valid` body → 201 with the review; duplicate `(user_id, rawg_id)` → 409 `{"message":"You already reviewed this game"}`; identity from the principal only |
+| GET | `/api/review/{id}` | Done — 200 or 404 |
+| GET | `/api/review?userId=` / `?rawgId=` / none | Done — filtered lists (newest-first), unfiltered `getAllReviews` |
+| PUT | `/api/review/{id}` | Done — runtime-verified (`@PathVariable` + `@Valid` body → 200; missing/unowned → 404) |
+| DELETE | `/api/review/{id}` | Done — runtime-verified (→ 204; entry disappears from `?rawgId=` list) |
 
 ---
 
@@ -169,6 +184,7 @@ cd Backend
 | `profiles` table (`V2__create_profiles_table.sql`) | `id`, `user_id` (FK → `users.id`, unique, cascade delete), `bio`, `avatar_url`, `created_at` | Done |
 | `library_entries` table (`V3__create_library_entries_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `game_name`, `game_image` (TEXT), `status` (CHECK: PLAYING/COMPLETED/PLAN_TO_PLAY/DROPPED), `added_at`, composite `UNIQUE (user_id, rawg_id)` — file later fixed (duplicate name + `entiries` spelling) with the DB checksum re-synced via `flyway:repair` | Done |
 | rename library constraint (`V4__rename_library_constraint.sql`) | `ALTER TABLE ... RENAME CONSTRAINT uq_library_entiries_user_game TO uq_library_entries_user_game` — the live constraint now has the correct name; DB is at Flyway version 4 | Done |
+| `reviews` table (`V5__create_reviews_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `rating` (CHECK 1–5), `content` (TEXT NOT NULL), `created_at`, `UNIQUE (user_id, rawg_id)` → duplicate review 409; lean design: no cached game fields (reviews render on `/game/:id`, which already has RAWG data) — and author-verified 2026-10-22 after three review rounds (round 1 junk: broken `DEFAULT` word, camelCase column, missing UNIQUE; round 2: rating column lost, `DEFAULTW`, constraint liIs about its name) | Partial — migration file Done (reviewed), **not yet applied to the live DB; first task when back: boot and watch for "Successfully applied 1 migration: V5"** |
 
 Migrations are managed by Flyway. Create a new migration for any schema change — do not
 edit applied migrations.
@@ -214,6 +230,15 @@ edit applied migrations.
 | Backend | `mvnw.cmd clean compile` with the library slice complete (all four `/api/library` endpoints, status DTO, exceptions, handlers) | Passing — 36 sources (2026-10-20) |
 | Backend | `mvnw.cmd clean compile` after the parked debt fixes (`StatusUpdateRequest` rename, `@Valid` on the PUT body, `toResponse` GET mapping, `@Transactional` on `updateStatus`, dead repo method removed, `ProfileController` `@Valid`) | Passing (2026-10-21) |
 | Frontend | `npm run lint` + `npm run build` after the library page, add-to-library card, GameCard/GameDetailsPage redesigns, and inline delete confirmation | Passing — 47 modules (2026-10-21) |
+| Frontend | `npm run lint` + `npm run build` after the review feature (reviewService + ReviewSection + GameDetailsPage wiring) | Passing — 49 modules (2026-10-22) |
+| Reviews | Backend technique for author display: `userName` added to `ReviewResponse` (second entity field `username`, `toResponse` updated atomically — positional `@AllArgsConstructor` mismatch caught by compile) — verified in live JSON `"userName":"Reth Chhaiya"` | Done (2026-10-22) |
+| Reviews | Frontend review section code-complete; **not yet exercised in the browser** — next session first task: manual test on `/game/:id` (load, post fresh 201, duplicate 409 inline, edit, delete, signed-out prompt, 400 messages), then `npm run lint` + build re-check | Partial |
+| Library | Full runtime round-trip against Neon: add (201) → duplicate (409) → GET (200) → PUT status (200) → DELETE (204) | Success (manual, author-verified 2026-10-21 night) — Phase 5 closed |
+| Database | V5 migration applied and live; boot validates 5 migrations ("Successfully validated 5 migrations… schema up to date") — V5 itself had been applied by an earlier boot the same day | Done (2026-10-22) |
+| Backend | `mvnw.cmd clean compile` with the review slice complete (entity/repo/DTOs/service/controller + exception) | Passing — 43 sources (2026-10-22) |
+| Reviews | Runtime round-trip against Neon: POST → 201, duplicate → 409, GET `?rawgId=` → 200 (newest-first), PUT → 200, DELETE → 204, GET after delete → `[]`; validation `{"rating":9}`/blank content → 400; no-token → 401 | Success (manual, 2026-10-22) — Phase 6 backend closed |
+| Reviews | Duplicate review returned **401** instead of 409 — root cause: `@ExceptionHandler(ReviewAlreadyExistsException.class)` annotation was missing from the handler method (body was correct; an unannotated method is dead code, exception escaped and the security entry point answered 401) | Fixed and re-verified (2026-10-22) |
+| Testing | `curl.exe` with JSON body through PowerShell 5.1 produced phantom 401s — broken `Authorization` header from PS's arg-quote mangling (body without embedded quotes worked; `Invoke-RestMethod` unaffected). Backend was fine both times | Diagnosis note (2026-10-22) |
 
 ---
 
@@ -419,6 +444,91 @@ edit applied migrations.
 - `GameCard` redesigned: artwork overlay, rating/Metacritic badges, ratings count, year, up to two genre chips, hover "View details" CTA.
 - Verified: `npm run lint`, `npm run build` (47 modules), `mvnw.cmd clean compile`. Library runtime round-trip (add → duplicate 409 → GET → PUT → DELETE) still pending.
 
+### 2026-10-22 — Phase 6 kickoff: reviews schema + entity/repository slice
+
+- **Schema (`V5__create_reviews_table.sql`)** — authored by the user, three review rounds before passing:
+  - Round 1: two hard bugs (`TIMESTAMP DELETE CURRENT_TIMESTAMP` verb-typo; `createdAt` unquoted camelCase → folds to `createdat` and mismatches Hibernate's `created_at`) + missing the agreed `UNIQUE (user_id, rawg_id)`.
+  - Round 2: fixed those, then broke new things — `rating` column deleted entirely during rewrite (the "diff against previous version before calling it done" lesson), `DEFAULTW` typo, constraint named `review_rating_check` while guarding uniqueness.
+  - Round 3: all six targets hit (rating + named-style check, `DEFAULT`, `created_at`, `uq_reviews_user_game`, lean, one-column-per-line). One soft call left to the author: the rating CHECK is unnamed (auto-generates `reviews_rating_check`) — naming convention consistency decision.
+- **Design decisions taught/made this phase:**
+  - Lean vs cached: reviews render on `/game/:id` (RAWG data already loaded) → `rawg_id` only now; `game_name`/`game_image` arrive via a *forward* migration if a "reviews by user" page ever needs them (lean→cached = one migration; cached→lean never un-caches cleanly).
+  - Validation placement (the library statuses analogy): validate a field *by what it is, at the boundary where it enters* — DTO annotations (`@Min/@Max`) for numeric ranges, service whitelist for arbitrary sets (statuses), DB CHECK as backstop only (bad value reaching the DB surfaces as a 500, not a clean 400).
+  - `@Table(name="reviews")` is *required* here — Hibernate would map entity `Review` to table `review` otherwise, and V5 would never be found.
+- **Entity/repository slice reviewed (author-written), 4 fixes outstanding for next session:**
+  1. `Review.getCreatedAt()` missing — Jackson will drop `createdAt` from any JSON (same family: `getid()` 2026-10-18, library response arity 2026-10-20).
+  2. Bean-validation annotations (`@Min/@Max/@NotBlank`) pasted onto the entity — belong on the future `ReviewRequest` DTO; on the entity `@Valid` never sees them.
+  3. Association field named `userId` but typed `User` — rename to `user` (like `LibraryEntry`); consequence: `findByUserId(Long)` would be a trap because Spring Data resolves `userId` as an exact field match of type `User`, then fails on the `Long` parameter. Renaming to `user` makes `findByUserId` parse correctly as the `user.id` path.
+  4. `ReviewRepository` empty — the two agreed derived queries (`findByUserId`, reviews by `rawgId` newest-first) not written yet.
+- **Next session, in order:** (1) boot backend and confirm Flyway applies V5 (receipt line `Successfully applied 1 migration: V5`, validate → 5/5) — nothing reviewed touches the DB yet; (2) apply the 4 entity/repo fixes; (3) proceed to the DTO slice (`ReviewRequest` with `@Min/@Max/@NotBlank` + `ReviewResponse`) then service; (4) same as always — author writes, coach reviews.
+
+### 2026-10-22 — Phase 6 frontend: review service + review section
+
+- `reviewService.js` (author-authored, 4 coaching rounds): four functions against the
+  backend contract. Lessons landed along the way:
+  - `headers: { Authorization }` must be nested — a top-level fetch-options key is
+    silently ignored (phantom 401s).
+  - Path vs query: filters ride the query string (`/review?rawgId=`), row ids ride the
+    path (`/review/{id}`) — must match the controller's `@RequestParam` vs `@PathVariable`.
+  - Error-deal lesson: **services throw, components catch; a catch that doesn't rethrow
+    swallows** (proven twice in one file). `libraryService`'s catch-log-rethrow is the
+    house shape.
+  - `JSON.stringify(reviewId, userData)` — second arg of stringify is a **replacer
+    filter**, not more data (silent body truncation → server 400).
+  - DELETE → 204 No Content: `if (response.status === 204) return null;` before any
+    parse, else success throws `SyntaxError` (success reported as failure).
+  - Filename typo `reivewService.js` → `reviewService.js` renamed before first import.
+- Backend micro-slice for author display: `userName` added to `ReviewResponse`
+  (positional Lombok all-args + `toResponse` edited together, compile caught the arity),
+  `getUsername()` from the existing `user` join — no DB change. Live-verified.
+- `ReviewSection.jsx` built (this once authored by the coach per request): props-only
+  `rawgId`; load-on-mount; loading/error/empty states; signed-out "log in to leave a
+  review"; one form serving create **and** edit (`editingId` branch in submit); 409 →
+  "You already reviewed this game", 400 → joined `fieldErrors`; list mutated from server
+  responses (prepend created / map replace updated / filter out deleted); author-only
+  Edit/Delete with `busyId`. Styled to the page's card/badge vocabulary.
+- Wired into `GameDetailsPage` after Screenshots (`<ReviewSection rawgId={Number(id)} />`).
+- Draft draft-file confusion: first attempt saved to `src/pages/ReviewSection.jsx`
+  (component ≠ page) — removed, correct home is `src/components/reviews/`.
+- Verified: `npm run lint` (0 errors), `npm run build` (49 modules).
+- **Not yet done:** browser walkthrough of the review section (post/edit/delete,
+  409 and 400 paths, signed-out prompt) — first task next session.
+
+### 2026-10-22 — Phase 6 backend complete: reviews runtime-verified
+
+- Coach-review fixes applied by the author across four review rounds:
+  - Identity switched to the principal: `createReview(User user, …)`, controller
+    `@AuthenticationPrincipal`; `ReviewRequest.userId` deleted; service no longer touches
+    `userRepository`.
+  - `jakarta.persistence.EntityNotFoundException` → house `ResourceNotFoundException` (404s).
+  - Shared `getOwnedReview` (missing **or** not-owned → 404) for PUT/DELETE.
+  - Duplicate guard via `existsByUserIdAndRawgId` + `ReviewAlreadyExistsException` → 409.
+  - Ordering: `…OrderByCreatedAtDesc` on both derived queries (rename + both call sites, one edit).
+- Bug hunting during the round-trip (three layers, in order of discovery):
+  1. **Red herring**: `curl.exe` + JSON via PowerShell 5.1 mangles embedded double quotes →
+     broken `Authorization` header → phantom 401s. Proven by the POST with `{}` body reaching
+     `@Valid` (400) while the same header 200'd on GET. Any JSON client other than PS 5.1 is
+     fine.
+  2. **Environment scare**: the backend process serving the failing requests was the author's
+     own 19:22 terminal boot (found via `Win32_Process` parent chain), not the coach's 19:05
+     background boot — which had died earlier with `PSQLException: connection attempt failed`
+     (Neon wire flapping; a boot-time lesson: the JWT filter does a DB call on every
+     authenticated request, so DB outages masquerade as auth failures).
+  3. **The real bug**: duplicate review → 401, not 409. Discriminating probes (PUT/DELETE
+     nonexistent → 404 ✓, so the advice category worked) isolated it to the
+     original `@ExceptionHandler` annotation was missing (method body correct, but an
+     unannotated method is invisible; the
+     exception escaped into the security chain's error dispatch → custom entry point → 401).
+     One-line fix + fresh boot + full round-trip green.
+- Round-trip receipts (2026-10-22, user 2): POST 201 → duplicate 409 → GET 200 (newest-first)
+  → PUT 200 → DELETE 204 → GET `[]` → validation 400 (rating 9 / blank content) → no-token 401.
+- Remaining for Phase 6: frontend review UI (form + list on `/game/:id`, `reviewService.js`,
+  `Authorization` wiring per `profileService`), then the usual lint/build.
+
+### 2026-10-22 — Phase 5 closed: library runtime-verified
+
+- The library round-trip was executed by the author on the night of 2026-10-21: add → 201, duplicate → 409, GET → 200, PUT status → 200, DELETE → 204. Phase 5 complete; `/library` is now a fully verified feature next to profiles.
+- Next: Phase 6 (reviews), reusing the RAWG-id + cached-display-fields game-reference pattern.
+
 ### Earlier
 
 - Frontend game discovery UI (ExplorePage, GameDetailsPage, GameCard, gameService).
@@ -430,8 +540,10 @@ edit applied migrations.
 ## Not Built Yet
 
 - `Authorization` header on future feature calls (reviews) — `getCurrentUser` and `profileService` show the pattern.
-- Personal game library — **code Done end to end** (backend endpoints, `libraryService.js`, `/library` page, add-to-library card on the details page); **runtime verification pending** (curl/browser round-trip against Neon: 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204).
-- Reviews.
+- Personal game library — **Done end to end, runtime-verified** (backend endpoints, `libraryService.js`, `/library` page, add-to-library card on the details page; round-trip 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204 executed 2026-10-21 night).
+- Reviews — **Backend Done & runtime-verified (2026-10-22)**; **frontend code-complete**
+  (reviewService.js + ReviewSection.jsx wired into `/game/:id`), pending browser
+  walkthrough and final lint/build re-check.
 - Community posts, likes, comments.
 - Automated feature tests (backend and frontend).
 - Deployment configuration.

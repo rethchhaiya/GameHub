@@ -13,6 +13,7 @@ import com.gamehub.backend.exception.EmailAlreadyExistsException;
 import com.gamehub.backend.exception.GameAlreadyInLibraryException;
 import com.gamehub.backend.exception.InvalidCredentialsException;
 import com.gamehub.backend.exception.ResourceNotFoundException;
+import com.gamehub.backend.exception.ReviewAlreadyExistsException;
 
 @RestControllerAdvice 
 public class GlobalExceptionHandler {
@@ -50,6 +51,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(GameAlreadyInLibraryException.class)
     public ResponseEntity <Map<String, String>> handleGameAlreadyInLibrary(GameAlreadyInLibraryException exception){
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                             .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ReviewAlreadyExistsException.class)
+    public ResponseEntity <Map<String, String>> handleReviewAlreadyExists(ReviewAlreadyExistsException exception){
         return ResponseEntity.status(HttpStatus.CONFLICT)
                              .body(Map.of("message", exception.getMessage()));
     }

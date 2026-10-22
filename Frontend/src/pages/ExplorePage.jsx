@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchGames, fetchGamesByName } from "../services/gameService";
-import GameCard from "../components/GameCard";
+import GameCard from "../components/games/GameCard";
 
 function ExplorePage() {
   const [loading, setLoading] = useState(false);

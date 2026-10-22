@@ -52,7 +52,7 @@ public class LibraryEntry {
         this.status = status;
     }
 
-     public Long getId() {
+    public Long getId() {
         return id;
     }
 
