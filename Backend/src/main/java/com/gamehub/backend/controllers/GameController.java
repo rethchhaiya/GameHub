@@ -22,9 +22,9 @@ public class GameController {
     }   
 
     @GetMapping("/api/games")
-    public JsonNode get(){
+    public JsonNode get(@RequestParam(defaultValue = "1")int page){
 
-        return gameService.getGames();
+        return gameService.getGames(page);
     }
 
     @GetMapping("/api/games-name")

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.gamehub.backend.dto.ReviewRequest;
 import com.gamehub.backend.dto.ReviewResponse;
+import com.gamehub.backend.dto.ReviewUpdateRequest;
 import com.gamehub.backend.entity.Review;
 import com.gamehub.backend.entity.User;
 import com.gamehub.backend.exception.ResourceNotFoundException;
@@ -72,7 +73,7 @@ public class ReviewService {
     }
 
     // UPDATE REVIEW
-    public ReviewResponse updateReview(Long id, User user, ReviewRequest request){
+    public ReviewResponse updateReview(Long id, User user, ReviewUpdateRequest request){
         Review review = getOwnedReview(id, user);
         
         review.setRating(request.getRating());

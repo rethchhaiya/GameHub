@@ -9,30 +9,31 @@ import RegisterPage from "../pages/RegisterPage";
 import MainLayout from "../components/layouts/MainLayout";
 import PrivateRoute from "./PrivateRoute";
 import ProfilePage from "../pages/ProfilePage";
+import ScrollToTop from "../components/ScrollToTop";
 
 function AppRoute() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+    <>
+      <ScrollToTop />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-      <Route element={<MainLayout />}>
-        <Route path="/" element={<Navigate to={"/home"} replace />} />
-        <Route path="/home" element={<HomePage />} />
-        <Route path="/explore" element={<ExplorePage />} />
-        <Route path="/community" element={<CommunityPage />} />
-        <Route path="/game/:id" element={<GameDetailsPage />} />
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<Navigate to={"/home"} replace />} />
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/community" element={<CommunityPage />} />
+          <Route path="/game/:id" element={<GameDetailsPage />} />
 
-        {/* Protect route */}
-        <Route element={<PrivateRoute />}>
-          <Route path="/library" element={<MyLibraryPage />} />
-          <Route path="/profile" element={<ProfilePage/>} />
-          
+          {/* Protect route */}
+          <Route element={<PrivateRoute />}>
+            <Route path="/library" element={<MyLibraryPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+          </Route>
         </Route>
-      </Route>
-
-      {/* Protect route */}
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

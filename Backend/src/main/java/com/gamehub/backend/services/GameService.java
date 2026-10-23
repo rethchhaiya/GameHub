@@ -21,15 +21,15 @@ public class GameService {
     @Value("${rawg.api.key}")
     private String apiKey;
 
-    private String buildGamesUrl(){
-        return "https://api.rawg.io/api/games" + "?key=" + apiKey + "&page_size=10";
+    private String buildGamesUrl(int page){
+        return "https://api.rawg.io/api/games" + "?key=" + apiKey + "&page_size=20" + "&page=" + page;
     }
 
     private String buildGameUrlByName(String name){
 
         String encodeName = URLEncoder.encode(name, StandardCharsets.UTF_8);
 
-        return "https://api.rawg.io/api/games" + "?key=" + apiKey + "&page_size=10" + "&search=" + encodeName;
+        return "https://api.rawg.io/api/games" + "?key=" + apiKey + "&page_size=20" + "&search=" + encodeName;
     }
 
     private String builGameUrlById(int id){
@@ -43,16 +43,16 @@ public class GameService {
 
     private JsonNode removeRawgKeyLinks(JsonNode response){
         if(response instanceof ObjectNode objectNode){
-            objectNode.remove("next");
+            // objectNode.remove("next");
             objectNode.remove("previous");
         }
         
         return response;
     }
 
-    public JsonNode getGames(){
+    public JsonNode getGames(int page){
         JsonNode response = restClient.get()
-                  .uri(buildGamesUrl())
+                  .uri(buildGamesUrl(page))
                   .retrieve()
                   .body(JsonNode.class);
         return removeRawgKeyLinks(response);

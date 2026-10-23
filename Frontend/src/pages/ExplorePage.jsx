@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchGames, fetchGamesByName } from "../services/gameService";
 import GameCard from "../components/games/GameCard";
 
@@ -7,40 +7,97 @@ function ExplorePage() {
   const [error, setError] = useState("");
   const [games, setGames] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadMode, setLoadMode] = useState(null);
 
+  const observerRef = useRef(null);
+  const sentinelRef = useRef(null);
 
   useEffect(() => {
-    async function loadGames() {
-      setLoading(true);
-      setError("");
-      try{
-        const result = await fetchGames();
-        setGames(result.results);
-      }catch(e){
-        setError(e.message);
-        setGames([]);
-      }finally{
-        setLoading(false);
-      }
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    setLoadMode(games.length === 0 ? "initial" : "append");
+
+    fetchGames(page)
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+        setGames((prev) => {
+          const existingIds = new Set(prev.map((g) => g.id));
+          const newOnes = data.results.filter((g) => !existingIds.has(g.id));
+          return [...prev, ...newOnes];
+        });
+        setHasMore(Boolean(data.next));
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadMode(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page]);
+
+  // get more page
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore) {
+      setPage((p) => p + 1);
     }
-    loadGames();
-  }, [])
+  }, [loading, hasMore]);
+
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { rootMargin: "300px" },
+    );
+
+    if (sentinelRef.current) {
+      observerRef.current.observe(sentinelRef.current);
+    }
+
+    return () => observerRef.current?.disconnect();
+  }, [loadMore]);
 
   async function handleSearch(event) {
     event.preventDefault();
 
     setLoading(true);
     setError("");
+    setLoadMode(games.length === 0 ? "initial" : "append");
 
     try {
-      const result = await (searchTerm.trim() ? fetchGamesByName(searchTerm) : fetchGames());
-
+      const result = await (searchTerm.trim()
+        ? fetchGamesByName(searchTerm)
+        : fetchGames(1));
       setGames(result.results);
+
+      if (searchTerm.trim()) {
+        setHasMore(false);
+      } else {
+        setPage(1);
+        setHasMore(Boolean(result.next));
+      }
     } catch (e) {
       setError(e.message);
       setGames([]);
     } finally {
       setLoading(false);
+      if (!cancelled) setLoadMode(null);
     }
   }
 
@@ -93,18 +150,17 @@ function ExplorePage() {
           </p>
         )}
 
-        {loading && (
+        {loading && loadMode === "initial" && (
           <p className="mb-6 text-sm text-lime-300">Finding your games...</p>
         )}
-      
+
         {/* Game results */}
-        {!loading && games.length > 0 && (
+        {games.length > 0 && (
           <section>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-semibold sm:text-2xl">
                 Search results
               </h2>
-
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-400">
                 {games.length} games
               </span>
@@ -115,7 +171,20 @@ function ExplorePage() {
                 <GameCard key={game.id} game={game} />
               ))}
             </div>
+            <div ref={sentinelRef} className="h-10" />
           </section>
+        )}
+
+        {loading && loadMode === "append" && (
+          <p className="py-4 text-center text-sm text-gray-500">
+            Loading more games…
+          </p>
+        )}
+
+        {!hasMore && !loading && games.length > 0 && (
+          <p className="py-4 text-center text-sm text-gray-600">
+            You've reached the end.
+          </p>
         )}
 
         {/* Empty state */}
@@ -136,7 +205,6 @@ function ExplorePage() {
             </p>
           </div>
         )}
-        
       </div>
     </main>
   );

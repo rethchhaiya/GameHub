@@ -3,7 +3,7 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-22 (Phase 6 reviews backend runtime-verified)
+Last updated: 2026-10-23 (closure of Phase 6: review edit fixed with `ReviewUpdateRequest`, browser walkthrough of create/edit/duplicate confirmed)
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -62,7 +62,7 @@ Root: `Frontend/`
 | `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token) | Done |
 | `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
 | `src/services/reviewService.js` | `getReviewByGame(rawgId)` (GET `/review?rawgId=`), `createReview` (POST), `updateReview` (PUT), `deleteReview` (DELETE with 204 guard → `null`); all attach `Authorization`; normalized errors (`status`/`fieldErrors`) — authored through 4 coaching rounds: headers nesting, correct query-param URL (path vs query lesson), no-swallow error deal (services throw → components catch; catch must rethrow), `JSON.stringify(userData)` single-arg (second arg is a replacer filter), `${reviewId}` template var, 204 no-body guard | Done |
-| `src/components/reviews/ReviewSection.jsx` | Reviews on `/game/:id`: load-on-mount (loading/error/empty/list), signed-out prompt, form (rating select + textarea) for create **and** edit (`editingId` — one form, two jobs), 409/400 error mapping, server-response list updates (add/replace/filter), author-only Edit/Delete with `busyId` guard | Done (code) — not yet browser-tested |
+| `src/components/reviews/ReviewSection.jsx` | Reviews on `/game/:id`: load-on-mount (loading/error/empty/list), signed-out prompt, form (star rating component + textarea) for create **and** edit (`editingId` — one form, two jobs), 409/400 error mapping, server-response list updates (add/replace/filter), author-only Edit/Delete with `busyId` guard; `StarRating` sub-component (hover preview, 1–5 buttons, unused `readOnly` prop parked as a free hook for list rendering) | Done — browser-verified: create/edit/duplicate-409/delete/signed-out prompt (2026-10-23) |
 | `GameDetailsPage.jsx` | Renders `<ReviewSection rawgId={Number(id)} />` after the Screenshots section (main column) | Done |
 | `src/contexts/authContext.js` | Raw `AuthContext` (`createContext`) | Done |
 | `src/contexts/AuthContext.jsx` | `AuthProvider`: holds current user; `login(user, token)` stores `user_Data` + `token`; `try/catch` self-heal if stored JSON is corrupt; `login` throws if user missing; `logout` clears both keys; boot `useEffect` validates the session via `getCurrentUser` (refresh on 200, logout on 401 only); `loading` initialized from the stored token and set false when boot validation finishes | Done |
@@ -136,6 +136,7 @@ Root: `Backend/`
 | `.../entity/Review.java` | Maps to `reviews`; IDENTITY id, `@ManyToOne`+`@JoinColumn("user_id")` → `user` (renamed from `userId` per the derived-query lesson), `rawgId`, `rating`, `content`, `@CreationTimestamp` on `createdAt`; Lombok `@Data`/`@NoArgsConstructor` (generates `getCreatedAt()` — fixes the review-round getter debt); `@ToString.Exclude`+`@EqualsAndHashCode.Exclude` on `user` to keep Lombok equals/hashCode from traversing the association | Done |
 | `.../repository/ReviewRepository.java` | `findByUserIdOrderByCreatedAtDesc`, `findByRawgIdOrderByCreatedAtDesc` (newest-first per design), `existsByUserIdAndRawgId` (duplicate guard) | Done |
 | `.../dto/ReviewRequest.java` | Input DTO (`rawgId`, `rating`, `content`) with `@NotNull`/`@Min(1)`/`@Max(5)`/`@NotBlank` on the DTO boundary (not the entity); no `userId` — identity is principal-only | Done |
+| `.../dto/ReviewUpdateRequest.java` | Tiny body DTO for the PUT (only `rating` + `content`, no `rawgId`): the edit endpoint identifies the row via `@PathVariable` + principal, so the update body validates exactly what it reads (the `StatusUpdateRequest` lesson applied); swaps in for `ReviewRequest` on `PUT /api/review/{id}` + `updateReview` signature — added 2026-10-23 after the real browser walkthrough surfaced "must not be null" on edit (the PUT was validating a `rawgId` the service never reads) | Done |
 | `.../dto/ReviewResponse.java` | Output DTO (`id`, flat `userId`, `rawgId`, `rating`, `content`, `createdAt`) + Lombok no-arg/all-arg | Done |
 | `.../services/ReviewService.java` | `createReview(User user, …)` — duplicate guard (`existsByUserIdAndRawgId` → 409) before save; `getReviewById`, `getAllReviews`, `getReviewByUser`, `getReviewByRawgId`; `updateReview`/`deleteReview` via shared `getOwnedReview` (missing **or not-owned** → 404) — library's house pattern; `toResponse` mapper; principal `User` passed in, no `userRepository` dependency | Done |
 | `.../controllers/ReviewController.java` | `POST /api/review` (201 + `@Valid`), `GET /api/review/{id}`, `GET /api/review` (`?userId=`/`?rawgId=` optional filters), `PUT /api/review/{id}`, `DELETE /api/review/{id}` (204); `@AuthenticationPrincipal User user` on all mutations | Done |
@@ -171,7 +172,7 @@ cd Backend
 | POST | `/api/review` | Done — runtime-verified 2026-10-22: `@Valid` body → 201 with the review; duplicate `(user_id, rawg_id)` → 409 `{"message":"You already reviewed this game"}`; identity from the principal only |
 | GET | `/api/review/{id}` | Done — 200 or 404 |
 | GET | `/api/review?userId=` / `?rawgId=` / none | Done — filtered lists (newest-first), unfiltered `getAllReviews` |
-| PUT | `/api/review/{id}` | Done — runtime-verified (`@PathVariable` + `@Valid` body → 200; missing/unowned → 404) |
+| PUT | `/api/review/{id}` | Done — runtime-verified (`@PathVariable` + `@Valid` body → 200; missing/unowned → 404). Body is `ReviewUpdateRequest` (`rating` + `content` only) since 2026-10-23 — `rawgId` removed from the PUT contract because the service never read it and edit must never re-point a review at another game |
 | DELETE | `/api/review/{id}` | Done — runtime-verified (→ 204; entry disappears from `?rawgId=` list) |
 
 ---
@@ -238,6 +239,9 @@ edit applied migrations.
 | Backend | `mvnw.cmd clean compile` with the review slice complete (entity/repo/DTOs/service/controller + exception) | Passing — 43 sources (2026-10-22) |
 | Reviews | Runtime round-trip against Neon: POST → 201, duplicate → 409, GET `?rawgId=` → 200 (newest-first), PUT → 200, DELETE → 204, GET after delete → `[]`; validation `{"rating":9}`/blank content → 400; no-token → 401 | Success (manual, 2026-10-22) — Phase 6 backend closed |
 | Reviews | Duplicate review returned **401** instead of 409 — root cause: `@ExceptionHandler(ReviewAlreadyExistsException.class)` annotation was missing from the handler method (body was correct; an unannotated method is dead code, exception escaped and the security entry point answered 401) | Fixed and re-verified (2026-10-22) |
+| Reviews | Edit review → 400 "must not be null" — the PUT validated the full `ReviewRequest` (whose `rawgId` is `@NotNull`) while the UI sensibly sent only `{rating, content}`, and the service never read `rawgId` on update anyway. Fix: `ReviewUpdateRequest` DTO on PUT + service signature; front unchanged (it already sent exactly what the new contract reads) | Fixed — compile verified; edit browser-tested 200 (2026-10-23) |
+| Reviews | Browser walkthrough (author, 2026-10-23): create → appears at top of list; edit → inline form pre-fills, save → 200, list row replaced; duplicate POST → 409 "already reviewed this game" confirmed in UI (a first scare — user thought a double post went through — resolved as false alarm, the guard held); delete → 204, row disappears; signed-out → "Log in to leave a review" prompt replaces the form | Success — walkthrough complete, **Phase 6 closed** (2026-10-23) |
+| Frontend | `npm run lint` + `npm run build` after the edit fix and the `StarRating` change (dropdown → star buttons; hover preview) | Passing — 49 modules (2026-10-23) |
 | Testing | `curl.exe` with JSON body through PowerShell 5.1 produced phantom 401s — broken `Authorization` header from PS's arg-quote mangling (body without embedded quotes worked; `Invoke-RestMethod` unaffected). Backend was fine both times | Diagnosis note (2026-10-22) |
 
 ---
@@ -529,6 +533,40 @@ edit applied migrations.
 - The library round-trip was executed by the author on the night of 2026-10-21: add → 201, duplicate → 409, GET → 200, PUT status → 200, DELETE → 204. Phase 5 complete; `/library` is now a fully verified feature next to profiles.
 - Next: Phase 6 (reviews), reusing the RAWG-id + cached-display-fields game-reference pattern.
 
+### 2026-10-23 — Phase 6 closure: review edit contract fixed + browser walkthrough
+
+- The pending browser walkthrough found its first real bug: **editing your own review returned
+  400 "must not be null"**. Evidence chain: ReviewSection's edit path sends `{rating, content}`
+  (no `rawgId` — the UI had it right), but `PUT /review/{id}` validated the full `ReviewRequest`,
+  whose `rawgId` is `@NotNull` — while `ReviewService.updateReview` only ever called
+  `setRating`/`setContent`, never reading `rawgId` on update. The server demanded a field it
+  then threw away.
+- Fix (Option A, the `StatusUpdateRequest` house pattern): new `ReviewUpdateRequest` DTO
+  (`rating` `@NotNull @Min(1) @Max(5)` + `@NotBlank content` — no `rawgId`), used by the PUT
+  mapping and the `updateReview` signature. Three atomic touch points: DTO file, controller
+  param type, service method signature. Frontend unchanged — it already sent exactly what the
+  new contract reads. `mvnw.cmd clean compile` passing.
+- Teaching point recorded: **create vs update DTOs** — create includes the identity you're
+  establishing (`rawgId`: which game); update includes only what's changing, because the URL
+  (`{id}`) + principal identify the row, and PUT accepting `rawgId` would let an edit re-point
+  a review at another game (bypassing the duplicate guard's `UNIQUE (user_id, rawg_id)` scope).
+- Author then swapped the rating dropdown for a self-built `StarRating` sub-component
+  (1–5 buttons, local `hovered` state providing hover preview,
+  `filled = hovered ? star <= hovered : star <= rating`, `type="button"` since it renders inside
+  the form — a bare button would submit). Coach review: correct component extraction; two
+  cosmetic suggestions left open (delete the commented-out `<select>` dead code; the orphan
+  `htmlFor="review-rating"` label now points at nothing). Optional idea parked: use the
+  component's unused `readOnly` prop to render stars in review list items for free.
+- Author false alarm en route: believed a duplicate review went through; re-checked, the 409
+  guard held. Duplicate/edit walk-through confirmed in the browser; lint + build passing
+  (49 modules).
+- **Still to confirm to fully close Phase 6:** delete in the browser (row disappears) and
+  the signed-out prompt on `/game/:id`.
+- Confirmed shortly after by the author (2026-10-23): delete → 204 and the row disappears;
+  signed-out on `/game/:id` shows the "Log in to leave a review" prompt instead of the form.
+  **Phase 6 (reviews) is now closed end to end** — schema, backend, frontend, and browser
+  walkthrough all verified.
+
 ### Earlier
 
 - Frontend game discovery UI (ExplorePage, GameDetailsPage, GameCard, gameService).
@@ -541,9 +579,11 @@ edit applied migrations.
 
 - `Authorization` header on future feature calls (reviews) — `getCurrentUser` and `profileService` show the pattern.
 - Personal game library — **Done end to end, runtime-verified** (backend endpoints, `libraryService.js`, `/library` page, add-to-library card on the details page; round-trip 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204 executed 2026-10-21 night).
-- Reviews — **Backend Done & runtime-verified (2026-10-22)**; **frontend code-complete**
-  (reviewService.js + ReviewSection.jsx wired into `/game/:id`), pending browser
-  walkthrough and final lint/build re-check.
+- Reviews — **Done end to end (Phase 6 closed 2026-10-23)**: backend runtime-verified
+  (2026-10-22), front browser-verified for create/edit/duplicate-409/delete/signed-out
+  prompt (2026-10-23). Optional polish ideas parked: delete the commented-out `<select>`
+  + orphan `htmlFor` label in `ReviewSection.jsx`; read-only `StarRating` in review list
+  items.
 - Community posts, likes, comments.
 - Automated feature tests (backend and frontend).
 - Deployment configuration.

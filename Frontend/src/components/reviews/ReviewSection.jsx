@@ -8,6 +8,33 @@ import {
   deleteReview,
 } from "../../services/reviewService";
 
+function StarRating({ rating, onChange, readOnly = false }) {
+  const [hovered, setHovered] = useState(0);
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const filled = hovered ? star <= hovered : star <= rating;
+
+        return (
+          <button
+            key={star}
+            type="button"
+            disabled={readOnly}
+            onClick={() => onChange?.(star)}
+            onMouseEnter={() => !readOnly && setHovered(star)}
+            onMouseLeave={() => !readOnly && setHovered(0)}
+            className={`text-xl transition ${
+              readOnly ? "cursor-default" : "cursor-pointer"
+            } ${filled ? "text-lime-400" : "text-gray-600"}`}
+          >
+            ★
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ReviewSection({ rawgId }) {
   const { user } = useAuth();
 
@@ -189,10 +216,12 @@ function ReviewSection({ rawgId }) {
             {editingId ? "Edit your review" : "Write a review"}
           </p>
 
-          <label className="block text-xs text-gray-500" htmlFor="review-rating">
+          <label
+            className="block text-xs text-gray-500"
+          >
             Rating
           </label>
-          <select
+          {/* <select
             id="review-rating"
             value={rating}
             onChange={(e) => setRating(e.target.value)}
@@ -203,7 +232,8 @@ function ReviewSection({ rawgId }) {
             <option value="3">3</option>
             <option value="2">2</option>
             <option value="1">1</option>
-          </select>
+          </select> */}
+          <StarRating rating={rating} onChange={setRating} />
 
           <textarea
             value={content}
@@ -213,9 +243,7 @@ function ReviewSection({ rawgId }) {
             className="w-full rounded-lg border border-white/10 bg-[#222630] px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:border-lime-400/50 focus:outline-none"
           />
 
-          {formError && (
-            <p className="text-sm text-red-400">{formError}</p>
-          )}
+          {formError && <p className="text-sm text-red-400">{formError}</p>}
 
           <div className="flex gap-2">
             <button

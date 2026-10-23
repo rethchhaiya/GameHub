@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.gamehub.backend.dto.ReviewRequest;
 import com.gamehub.backend.dto.ReviewResponse;
+import com.gamehub.backend.dto.ReviewUpdateRequest;
 import com.gamehub.backend.entity.User;
 import com.gamehub.backend.services.ReviewService;
 
@@ -60,7 +61,7 @@ public class ReviewController {
     public ResponseEntity<ReviewResponse> updateReview(
         @AuthenticationPrincipal User user,
         @PathVariable Long id,
-        @Valid @RequestBody ReviewRequest request){
+        @Valid @RequestBody ReviewUpdateRequest request){
         return ResponseEntity.ok((reviewService.updateReview(id, user, request)));
     }
 

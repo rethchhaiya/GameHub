@@ -1,13 +1,21 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-export async function fetchGames() {
-    const response = await fetch(`${API_BASE_URL}/games`);
+// const cache = { games: null};
+
+export async function fetchGames(page) {
+    // if(cache.games){
+    //     return cache.games;
+    // }
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_BASE_URL}/games?page=${page}`);
 
     if(!response.ok){
         throw new Error("Failed to fetch the games");
     }
     
-    return response.json();
+    const data = response.json();
+    // cache.games = data;
+    return data;
 }
 
 export async function fetchGamesByName(name) {
