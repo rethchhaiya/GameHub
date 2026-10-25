@@ -1,44 +1,46 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchGames, fetchGamesByName } from "../services/gameService";
-import GameCard from "../components/games/GameCard";
+import GameGrid from "../components/games/GameGrid";
 
 function ExplorePage() {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [games, setGames] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [loadMode, setLoadMode] = useState(null);
+  const [loadMode, setLoadMode] = useState("initial");
 
-  const observerRef = useRef(null);
   const sentinelRef = useRef(null);
+  const busyRef = useRef(false);
+  const hasMoreRef = useRef(true);
+
+  const loading = loadMode != null;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    setLoadMode(games.length === 0 ? "initial" : "append");
 
     fetchGames(page)
       .then((data) => {
+
         if (cancelled) {
           return;
         }
+
         setGames((prev) => {
           const existingIds = new Set(prev.map((g) => g.id));
           const newOnes = data.results.filter((g) => !existingIds.has(g.id));
           return [...prev, ...newOnes];
         });
+
         setHasMore(Boolean(data.next));
       })
       .catch((err) => {
+
         if (!cancelled) {
           setError(err.message);
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
         if (!cancelled) setLoadMode(null);
       });
     return () => {
@@ -46,37 +48,33 @@ function ExplorePage() {
     };
   }, [page]);
 
-  // get more page
-  const loadMore = useCallback(() => {
-    if (!loading && hasMore) {
-      setPage((p) => p + 1);
-    }
-  }, [loading, hasMore]);
-
   useEffect(() => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-    observerRef.current = new IntersectionObserver(
+    busyRef.current = loadMode != null;
+    hasMoreRef.current = hasMore;
+  });
+  
+  useEffect(() => {
+    const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
+        if (entries[0].isIntersecting && !busyRef.current && hasMoreRef.current) {
+          busyRef.current = true;
+          setLoadMode("append");
+          setPage((p) => p + 1);
         }
       },
       { rootMargin: "300px" },
     );
 
     if (sentinelRef.current) {
-      observerRef.current.observe(sentinelRef.current);
+      observer.observe(sentinelRef.current);
     }
 
-    return () => observerRef.current?.disconnect();
-  }, [loadMore]);
+    return () => observer.disconnect();
+  }, []);
 
   async function handleSearch(event) {
     event.preventDefault();
 
-    setLoading(true);
     setError("");
     setLoadMode(games.length === 0 ? "initial" : "append");
 
@@ -84,6 +82,7 @@ function ExplorePage() {
       const result = await (searchTerm.trim()
         ? fetchGamesByName(searchTerm)
         : fetchGames(1));
+
       setGames(result.results);
 
       if (searchTerm.trim()) {
@@ -95,9 +94,9 @@ function ExplorePage() {
     } catch (e) {
       setError(e.message);
       setGames([]);
+
     } finally {
-      setLoading(false);
-      if (!cancelled) setLoadMode(null);
+      setLoadMode(null);
     }
   }
 
@@ -166,14 +165,18 @@ function ExplorePage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {/* <div className="">
               {games.map((game) => (
-                <GameCard key={game.id} game={game} />
+                <GameGrid key={game.id}  games={games} />
               ))}
+            </div> */}
+            <div>
+              <GameGrid games={games}/>
             </div>
-            <div ref={sentinelRef} className="h-10" />
+            
           </section>
         )}
+        <div ref={sentinelRef} className="h-10" />
 
         {loading && loadMode === "append" && (
           <p className="py-4 text-center text-sm text-gray-500">

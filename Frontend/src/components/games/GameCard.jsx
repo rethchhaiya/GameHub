@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 
 function GameCard({ game }) {
@@ -7,7 +8,7 @@ function GameCard({ game }) {
   return (
     <Link
       to={`/game/${game.id}`}
-      className="group flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#171a22] transition duration-200 hover:-translate-y-1 hover:border-lime-400/40 hover:shadow-xl hover:shadow-black/30"
+      className="group flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#171a22] transition duration-200 hover:-translate-y-1 hover:border-lime-400/40"
     >
       {/* Artwork */}
       <div className="relative aspect-16/10 overflow-hidden bg-[#222630]">
@@ -27,13 +28,13 @@ function GameCard({ game }) {
         <div className="absolute inset-0 bg-linear-to-t from-[#171a22] via-transparent to-transparent" />
 
         <div className="absolute left-3 top-3 flex items-center gap-2">
-          <span className="rounded-lg border border-white/10 bg-black/70 px-2.5 py-1.5 text-sm font-semibold backdrop-blur-sm">
+          <span className="rounded-lg border border-white/10 bg-black/70 px-2.5 py-1.5 text-sm font-semibold">
             <span className="mr-1 text-lime-400">★</span>
             {typeof game.rating === "number" ? game.rating.toFixed(1) : "N/A"}
           </span>
 
           {game.metacritic != null && (
-            <span className="rounded-lg border border-white/10 bg-black/70 px-2.5 py-1.5 text-xs font-semibold text-gray-300 backdrop-blur-sm">
+            <span className="rounded-lg border border-white/10 bg-black/70 px-2.5 py-1.5 text-xs font-semibold text-gray-300">
               MC {game.metacritic}
             </span>
           )}
@@ -79,4 +80,4 @@ function GameCard({ game }) {
   );
 }
 
-export default GameCard;
+export default memo(GameCard);

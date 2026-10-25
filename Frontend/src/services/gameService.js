@@ -6,14 +6,13 @@ export async function fetchGames(page) {
     // if(cache.games){
     //     return cache.games;
     // }
-    const token = localStorage.getItem("token");
     const response = await fetch(`${API_BASE_URL}/games?page=${page}`);
 
     if(!response.ok){
         throw new Error("Failed to fetch the games");
     }
     
-    const data = response.json();
+    const data = await response.json();
     // cache.games = data;
     return data;
 }

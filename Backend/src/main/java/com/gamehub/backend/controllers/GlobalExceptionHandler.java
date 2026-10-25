@@ -14,6 +14,8 @@ import com.gamehub.backend.exception.GameAlreadyInLibraryException;
 import com.gamehub.backend.exception.InvalidCredentialsException;
 import com.gamehub.backend.exception.ResourceNotFoundException;
 import com.gamehub.backend.exception.ReviewAlreadyExistsException;
+import com.gamehub.backend.exception.UnauthorizedCommentDeletionException;
+import com.gamehub.backend.exception.UnauthorizedPostDeletionException;
 
 @RestControllerAdvice 
 public class GlobalExceptionHandler {
@@ -72,4 +74,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                             .body(Map.of("message", exception.getMessage()));
     }
+
+    @ExceptionHandler(UnauthorizedCommentDeletionException.class)
+    public ResponseEntity<Map<String, String>> handleCommentDeletion(UnauthorizedCommentDeletionException exception){
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(UnauthorizedPostDeletionException.class)
+    public ResponseEntity<Map<String, String>> handlePostDeletion(UnauthorizedPostDeletionException exception){
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                             .body(Map.of("message", exception.getMessage()));
+    }
+
+    
+
 }

@@ -3,7 +3,10 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-23 (closure of Phase 6: review edit fixed with `ReviewUpdateRequest`, browser walkthrough of create/edit/duplicate confirmed)
+Last updated: 2026-10-24 (Explore fully closed: render fixes verified, scroll-perf debugging
+re-run and closed — blur removal, `memo(GameCard)`, hover-shadow removal, observer race fix,
+`GameGrid` extracted — Exercise 3 done, RAWG `key=` stripped from `next`/`previous` with runtime
+receipts)
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -32,6 +35,7 @@ Root: `Frontend/`
 | `src/App.jsx` | Renders `BrowserRouter` + `AppRoute` | Done |
 | `src/main.jsx` | Mounts the app; wraps `<App/>` in `<AuthProvider>` | Done |
 | `src/routes/index.jsx` | Route table nested under a layout route; `/library` and `/profile` wrapped in `PrivateRoute` | Done |
+| `src/components/ScrollToTop.jsx` | Reads `useLocation().pathname`, `window.scroll({top:0})`-`instant` in a `[pathname]` effect, renders `null`; bugs fixed during review: `pathName` → `pathname` casing (effect never fired before) | Done — mounted above `<Routes>` in `AppRoute` (routes/index.jsx); lint/build passing (2026-10-24) |
 | `src/components/layouts/MainLayout.jsx` | Navbar + `<Outlet/>` + Footer; flex column pins footer | Done |
 | `src/components/layouts/Navbar.jsx` | Brand, nav links (active highlight), responsive hamburger menu, auth links, Profile link when logged in | Done |
 | `src/components/layouts/Footer.jsx` | Copyright + RAWG attribution, responsive | Done |
@@ -41,7 +45,7 @@ Root: `Frontend/`
 | File | Route | What it does | Status |
 | --- | --- | --- | --- |
 | `src/pages/HomePage.jsx` | `/home` | Hero, CTA to Explore, three feature cards | Done |
-| `src/pages/ExplorePage.jsx` | `/explore` | Game grid, search by name, loading/error/empty states | Done |
+| `src/pages/ExplorePage.jsx` | `/explore` | Game grid with **pagination + IntersectionObserver infinite scroll**: `[page]` effect appends page results (dedupe by `id`), `hasMore` from `data.next`, sentinel `div` + observer (`rootMargin: 400px`); `loadMore` guarded by `busyRef` — flipped **synchronously in the callback** (double-fire race closed), re-normalized by the ref-sync effect; `handleSearch` (by name replaces results + `hasMore=false`; empty term resets page 1); `loadMode` (`"initial"`/`"append"`/`null`) gates both loader lines while the grid stays mounted — **scroll-jump fixed**; observer cleanup fixed to `observer.disconnect()` | Done — author-verified smooth scrolling/append on device (2026-10-24) |
 | `src/pages/GameDetailsPage.jsx` | `/game/:id` | Redesigned hero + two-column layout; details, genres/devs/publishers/platforms; screenshot gallery + lightbox (arrows, Esc, click-out); "Your library" card (status select → `addToLibrary`, 409 + signed-out states) | Done |
 | `src/pages/LoginPage.jsx` | `/login` | Login form → `loginUser` → destructure `{token, user}` → `login(user, token)` → `navigate('/home')`; error display | Done |
 | `src/pages/RegisterPage.jsx` | `/register` | Register form + confirm-password check → `registerUser` → `login(user, token)` → `navigate('/home')` | Done |
@@ -55,7 +59,8 @@ Root: `Frontend/`
 
 | File | What it does | Status |
 | --- | --- | --- |
-| `src/components/GameCard.jsx` | Redesigned reusable card: artwork overlay, rating/Metacritic badges, ratings count, year, up to two genres, hover CTA | Done |
+| `src/components/games/GameCard.jsx` | Redesigned reusable card: artwork overlay, rating/Metacritic badges (**`backdrop-blur` removed** — recomposites every scroll frame), ratings count, year, up to two genres, hover CTA; hover is lift + lime border (**big soft shadow removed** — paint-expensive while cards slide under the cursor during scroll); **`memo`-wrapped** so appends re-render only the new cards | Done (2026-10-24) |
+| `src/components/games/GameGrid.jsx` | Reusable responsive game grid (authored by the author, extracted from ExplorePage): renders `GameCard`s with the 1/2/3/4-col classes; consumed by `ExplorePage` | Done (2026-10-24) |
 | `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend | Done |
 | `src/services/libraryService.js` | `getLibrary`, `addToLibrary` (POST), `updateStatus` (PUT), `deleteFromLibrary` (DELETE; handles 204); attach `Authorization`; normalized errors with `status`/`fieldErrors` | Done |
 | `src/constants/libraryStatuses.js` | Single source for the four status `{ value, label }` options (library page + details page) | Done |
@@ -108,7 +113,7 @@ Root: `Backend/`
 | `.../exception/InvalidCredentialsException.java` | Invalid login credentials | Done |
 | `.../exception/EmailAlreadyExistsException.java` | Duplicate email | Done |
 | `.../PasswordConfig.java` | `BCryptPasswordEncoder` bean (root package, not a `config/` package) | Done |
-| Game endpoints (`/api/games`, `/api/games-name`, `/api/games/{id}`, `/api/games/{id}/screenshots`) | Proxy RAWG through Spring Boot | Done |
+| Game endpoints (`/api/games`, `/api/games-name`, `/api/games/{id}`, `/api/games/{id}/screenshots`) | Proxy RAWG through Spring Boot; **Exercise 3 (2026-10-24)**: `key=` stripped from `next`/`previous` URLs (`stripRawgKeyFromLinks` + `java.net.URI`-based `removeKeyParam`, fail-closed on malformed URLs) — applied to all four GETs (deliberate spec deviation: screenshots lists also carried the key) | Done — runtime-verified 2026-10-24 |
 | `resources/db/migration/V1__create_users_table.sql` | Creates `users` table | Done |
 | `resources/application.properties` | DB config, `ddl-auto=none`, RAWG key from env, JWT config (`jwt.secret`, `jwt.expiration-ms`) | Done |
 | `.../config/SecurityConfig.java` | `SecurityFilterChain`: public game/auth paths `permitAll`, rest `authenticated`, stateless, CSRF off; `CorsConfigurationSource` bean (origin 5173, `/api/**`) wired explicitly via `.cors(cors -> cors.configurationSource(...))`; 401 JSON entry point; JWT filter registered via `addFilterBefore` | Done |
@@ -141,6 +146,11 @@ Root: `Backend/`
 | `.../services/ReviewService.java` | `createReview(User user, …)` — duplicate guard (`existsByUserIdAndRawgId` → 409) before save; `getReviewById`, `getAllReviews`, `getReviewByUser`, `getReviewByRawgId`; `updateReview`/`deleteReview` via shared `getOwnedReview` (missing **or not-owned** → 404) — library's house pattern; `toResponse` mapper; principal `User` passed in, no `userRepository` dependency | Done |
 | `.../controllers/ReviewController.java` | `POST /api/review` (201 + `@Valid`), `GET /api/review/{id}`, `GET /api/review` (`?userId=`/`?rawgId=` optional filters), `PUT /api/review/{id}`, `DELETE /api/review/{id}` (204); `@AuthenticationPrincipal User user` on all mutations | Done |
 | `.../exception/ReviewAlreadyExistsException.java` | Duplicate `(user_id, rawg_id)` review → 409 | Done |
+| `.../entity/Post.java`, `Comment.java`, `Like.java` | Mapped to `posts`/`comments`/`likes` (`V6__create_community_tables.sql`, untracked): `@ManyToOne` + `@JoinColumn` → `user`/`post`, `@CreationTimestamp`; `Like` declares `UNIQUE (post_id, user_id)` | Partial — untracked working tree |
+| `.../repository/PostRepository.java`, `CommentRepository.java`, `LikeRepository.java` | Feed `findAllByOrderByCreatedAtDesc`; comments `findAllByPostOrderByCreatedAtAsc` + `countByPost`; likes `existsByUserAndPost`, `countByPost`, and a **derived `deleteByUserAndPost`** (the only derived delete in the codebase) | Partial — untracked |
+| `.../services/PostService.java`, `CommentService.java` | Feed/create/delete post (author-only → 403); comments list/add/delete (comment author or post owner); counts folded into `PostResponse` (`likeCount`, `commentCount`, `likedByCurrentUser`) | Partial — untracked; not runtime-verified |
+| `.../services/LikeService.java` | `likePost` (exists-check then inherited `save`), `unlikePost` (**derived `deleteByUserAndPost`**, no `@Transactional`), shared `buildResponse` | **Broken** — unlike → 401, diagnosed 2026-10-25 (Work Log); like POST works |
+| `.../controllers/PostController.java`, `CommentController.java`, `CommentDeleteController.java`, `LikeController.java` | `GET/POST /api/posts`, `DELETE /api/posts/{id}`, `GET/POST /api/posts/{postId}/comments`, `DELETE /api/comments/{id}`, `POST/DELETE /api/posts/{postId}/likes`; principal via `@AuthenticationPrincipal` | Partial — untracked; like POST works, like DELETE broken |
 
 ### Backend check
 
@@ -174,6 +184,14 @@ cd Backend
 | GET | `/api/review?userId=` / `?rawgId=` / none | Done — filtered lists (newest-first), unfiltered `getAllReviews` |
 | PUT | `/api/review/{id}` | Done — runtime-verified (`@PathVariable` + `@Valid` body → 200; missing/unowned → 404). Body is `ReviewUpdateRequest` (`rating` + `content` only) since 2026-10-23 — `rawgId` removed from the PUT contract because the service never read it and edit must never re-point a review at another game |
 | DELETE | `/api/review/{id}` | Done — runtime-verified (→ 204; entry disappears from `?rawgId=` list) |
+| GET | `/api/posts?page=&size=` | Implemented (untracked) — paged feed, newest first |
+| POST | `/api/posts` | Implemented (untracked) — `@Valid` body → 200 `PostResponse` |
+| DELETE | `/api/posts/{id}` | Implemented (untracked) — author-only → 204; unowned → 403 |
+| GET | `/api/posts/{postId}/comments` | Implemented (untracked) — paged, oldest first |
+| POST | `/api/posts/{postId}/comments` | Implemented (untracked) |
+| DELETE | `/api/comments/{id}` | Implemented (untracked) — comment author or post owner → 204 |
+| POST | `/api/posts/{postId}/likes` | Implemented — works (author-reported 2026-10-25) |
+| DELETE | `/api/posts/{postId}/likes` | **Broken — returns 401**; root cause diagnosed 2026-10-25: missing `@Transactional` around the derived delete (Work Log) |
 
 ---
 
@@ -186,6 +204,7 @@ cd Backend
 | `library_entries` table (`V3__create_library_entries_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `game_name`, `game_image` (TEXT), `status` (CHECK: PLAYING/COMPLETED/PLAN_TO_PLAY/DROPPED), `added_at`, composite `UNIQUE (user_id, rawg_id)` — file later fixed (duplicate name + `entiries` spelling) with the DB checksum re-synced via `flyway:repair` | Done |
 | rename library constraint (`V4__rename_library_constraint.sql`) | `ALTER TABLE ... RENAME CONSTRAINT uq_library_entiries_user_game TO uq_library_entries_user_game` — the live constraint now has the correct name; DB is at Flyway version 4 | Done |
 | `reviews` table (`V5__create_reviews_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `rating` (CHECK 1–5), `content` (TEXT NOT NULL), `created_at`, `UNIQUE (user_id, rawg_id)` → duplicate review 409; lean design: no cached game fields (reviews render on `/game/:id`, which already has RAWG data) — and author-verified 2026-10-22 after three review rounds (round 1 junk: broken `DEFAULT` word, camelCase column, missing UNIQUE; round 2: rating column lost, `DEFAULTW`, constraint liIs about its name) | Partial — migration file Done (reviewed), **not yet applied to the live DB; first task when back: boot and watch for "Successfully applied 1 migration: V5"** |
+| `posts` / `comments` / `likes` tables (`V6__create_community_tables.sql`) | Untracked migration: `posts` (user FK, `content`, `image_url`, `created_at`), `comments` (post + user FK, `content`, `created_at`), `likes` (post + user FK, `UNIQUE (post_id, user_id)`); indexes on `posts.created_at`, `comments.post_id`, `likes.post_id` | Partial — file present (untracked); `likes` table confirmed reachable because `POST .../likes` persists a like |
 
 Migrations are managed by Flyway. Create a new migration for any schema change — do not
 edit applied migrations.
@@ -242,7 +261,13 @@ edit applied migrations.
 | Reviews | Edit review → 400 "must not be null" — the PUT validated the full `ReviewRequest` (whose `rawgId` is `@NotNull`) while the UI sensibly sent only `{rating, content}`, and the service never read `rawgId` on update anyway. Fix: `ReviewUpdateRequest` DTO on PUT + service signature; front unchanged (it already sent exactly what the new contract reads) | Fixed — compile verified; edit browser-tested 200 (2026-10-23) |
 | Reviews | Browser walkthrough (author, 2026-10-23): create → appears at top of list; edit → inline form pre-fills, save → 200, list row replaced; duplicate POST → 409 "already reviewed this game" confirmed in UI (a first scare — user thought a double post went through — resolved as false alarm, the guard held); delete → 204, row disappears; signed-out → "Log in to leave a review" prompt replaces the form | Success — walkthrough complete, **Phase 6 closed** (2026-10-23) |
 | Frontend | `npm run lint` + `npm run build` after the edit fix and the `StarRating` change (dropdown → star buttons; hover preview) | Passing — 49 modules (2026-10-23) |
+| Explore | Infinite scroll root cause: `fetchGames` ignored `page` + returned a cached page-1 response — every "load more" refetched page 1, dedupe ate it, next stayed truthy | Fixed — `fetchGames(page)`; review round 1 caught the `&page`→`?page`, dead `cache` ref, missing default, stray `Authorization` (2026-10-23) |
+| Explore | Scroll-jump on page 2: grid unmounted under `!loading && games.length > 0` | Diagnosis complete — `loadMode` state added; render-condition fixes pending (Work Log 2026-10-23) |
+| Explore | Author device check: fast scrolling with already-fetched data smooth after perf fixes — badge `backdrop-blur` removed, `memo(GameCard)`, hover shadow removed; residual dev lag classified as StrictMode/dev-React overhead (device + dev lag only, prod was clean) | Success (2026-10-24) |
+| Games | Exercise 3 re-verified on a **fresh boot** (first probe hit a stale old-code backend holding :8080 — killed, re-ran): `GET /api/games?page=1` → `next` = `.../games?page=2&page_size=10` with **no `key=`**, `previous` `null` clean; `/api/games-name?name=elder` → `next` also clean; 10 results each; `Boolean(next)` frontend contract intact | Success (runtime, 2026-10-24) |
 | Testing | `curl.exe` with JSON body through PowerShell 5.1 produced phantom 401s — broken `Authorization` header from PS's arg-quote mangling (body without embedded quotes worked; `Invoke-RestMethod` unaffected). Backend was fine both times | Diagnosis note (2026-10-22) |
+| Likes | `POST /api/posts/{postId}/likes` (author test) | Works — like persisted; endpoint returns `LikeResponse` |
+| Likes | `DELETE /api/posts/{postId}/likes` (author test) | **Bug — 401 `{"message":"Unauthorized"}`**. Diagnosed 2026-10-25, not fixed: `LikeService.unlikePost` calls the derived `LikeRepository.deleteByUserAndPost` with no `@Transactional`; the derived delete runs `EntityManager.remove` (verified in spring-data-jpa 4.1.1 bytecode) and throws `TransactionRequiredException`, which escapes the unhandled exception path into the security error dispatch → custom entry point 401. Fix direction: `@Transactional` on `unlikePost`/class |
 
 ---
 
@@ -567,9 +592,141 @@ edit applied migrations.
   **Phase 6 (reviews) is now closed end to end** — schema, backend, frontend, and browser
   walkthrough all verified.
 
+### 2026-10-23 — Explore infinite scroll + ScrollToTop (in progress)
+
+- **Built:** ExplorePage rewritten from single-shot fetch to paginated infinite scroll:
+  `[page]` effect fetches page N (append with id-dedupe), sentinel `div` +
+  `IntersectionObserver` (`rootMargin: 300px`) → `loadMore` guarded by `!loading && hasMore`.
+- **Root-cause debugging (coach-specified tests, author's fixes):**
+  1. `fetchGames()` took no `page` param, always requested page 1, and returned it from
+     an unconditional `cache.games` — so every "load more" silently re-fetched page 1,
+     dedupe ate it, `data.next` stayed truthy, scroll spun forever. Fixed: `fetchGames(page)`.
+  2. First fix had its own bugs, caught in review round 1: `&page=` instead of `?page=`
+     (404s), leftover `cache.games = data` after the declaration was commented out
+     (`ReferenceError` on success), no `page = 1` default (search sent `undefined` → 400),
+     plus scope-creep `Authorization` header on a `permitAll` endpoint (reverted).
+  3. Scroll-jump bug: the grid was rendered under `!loading && games.length > 0` —
+     page 2's `setLoading(true)` unmounted the grid, scroll position died, remount
+     restored "at the top". Fix concept: split `loading` into `loadMode`
+     (`"initial"`/`"append"`/`null`) — grid stays mounted while appending.
+- **Review round 2 state (coach spec issued):** line-level fixes still pending —
+  the "Finding your games..." line and the "Loading more…" footer are both still gated on
+  raw `loading` (must become `loadMode === "initial"` / `loadMode === "append"`);
+  `handleSearch` doesn't set/unset `loadMode`; the unguarded `setLoadMode(null)` in the
+  effect's `finally`; possible lint complaint about reading `games` with deps `[page]`
+  (fallback: `page === 1 ? "initial" : "append"`).
+- **`ScrollToTop` component added** + mounted in `AppRoute` above `<Routes>`; coach caught
+  `pathName` → `pathname` (destructuring typo meant the effect never fired) — fixed.
+  Browser verify + lint/build still owed.
+- **Parked exercises (next session, in order):**
+  1. Exercise 2 — search resets pagination: in `handleSearch`, term branch →
+     `setHasMore(false)` (scroll inert on search results); empty-term branch →
+     `fetchGames(1)` + `setPage(1)` + `setHasMore(Boolean(result.next))`. Known quirk: a
+     `setPage(1)` from page 3 retriggers the `[page]` effect (one redundant page-1 fetch,
+     deduped) — acceptable; unifying search into the effect flow (`[searchTerm, page]` deps)
+     is the bigger refactor if it ever matters.
+  2. Exercise 3 — **Option B chosen** for the RAWG-key leak in the proxied list links:
+     keep `next`/`previous` (the frontend contract `Boolean(data.next)` survives) but
+     strip the `key=` param from their URLs. Spec: rename `removeRawgKeyLinks` honestly,
+     sanitize per-field with `hasNonNull` guards, apply only in `getGames` +
+     `getGameByName` (drop from by-id/screenshots), tool = `java.net.URI` parsing or
+     `UriComponentsBuilder`, guard a possible `null` body. Option A (remove fields +
+     `hasMore = page * 20 < count`) stays documented as rejected.
+- **Parked idea (behind the exercises):** explore state surviving navigation —
+  the `<ScrollToTop>` interplay noted: once explore state persists, scroll-reset on
+  back-nav to `/explore` must become restore-aware. Recommendation: ExploreContext
+  (3-file split, AuthContext pattern, provider mounts app-wide in `main.jsx`).
+
+### 2026-10-24 — Explore closed: perf debugging re-run + GameGrid + Exercise 3
+
+- **GameGrid extraction landed (authored by the author mid-session)**: `GameGrid.jsx`
+  created next to `GameCard`, ExplorePage switched to it. Lint caught the cleanup:
+  unused `memo` import (memo already lives in `GameCard`'s export — extraction preserves
+  it), redundant `export default (GameGrid)` parens, unused `GameCard` import in
+  `ExplorePage`, stray test import in `CommunityPage`. All fixed; build 51 modules.
+- **Perf debugging re-run** (fast scroll still lagged on the desktop, including regions
+  with already-fetched data; device was smooth):
+  1. Carried-over fixes applied first: `backdrop-blur-sm` removed from both GameCard
+     badges (`backdrop-filter` recomposites every scroll frame); `GameCard` now
+     `memo(GameCard)` so appends reconcile only the ~20 new cards, not the whole grid.
+  2. **Observer double-fire race closed**: `busyRef.current = true` is now set
+     synchronously inside the IntersectionObserver callback before `setPage`, so two
+     callbacks arriving before React commits cannot trigger `setPage` twice; the no-deps
+     ref-sync effect still normalizes `busyRef` to `loadMode != null` after each render.
+  3. Loader-line/cleanup details: `observer.current?.disconnect()` fixed to
+     `observer.disconnect()` (a plain `IntersectionObserver` has no `.current` —
+     ref-pattern confusion; optional chaining silently swallowed it).
+  4. **Lag persisted in dev only** → suspect: hover styles re-firing as cards slide
+     under the stationary cursor (`hover:shadow-xl` = large blurred box-shadow, one of
+     the most paint-expensive CSS effects; phones have no cursor, matching "normal on
+     device"). **Option A applied**: dropped the hover shadow, kept lift + lime border.
+     CSS bundle −2 kB. Compositor-only effects remain (translate, image scale).
+- **Lesson recorded**: judge scroll feel on `npm run preview` / real device, never on
+  `npm run dev` — StrictMode double-invokes renders/effects on mount and dev React is
+  unminified; dev-mode jank is not evidence of a product bug. Related: an unexplained
+  instant 200 in runtime testing means suspect a stale server (an old-code backend was
+  found holding :8080 and killed before re-verification).
+- **Exercise 3 (Option B) implemented in `GameService`**: the previous draft had the
+  `next` removal commented out and stripped only `previous` — so `next` still leaked the
+  RAWG key into every response. Replaced with an honest rename plus a surgical strip:
+  - `stripRawgKeyFromLinks` (renamed from `removeRawgKeyLinks`) — walks `next`/`previous`
+    per-field with `hasNonNull` + instanceof-`StringNode` guards.
+  - `removeKeyParam(url)` — `java.net.URI` parse → filter `key=` out of the query →
+    rebuild via `new URI(scheme, authority, path, query, fragment)`; empty query drops
+    the `?`; malformed URL returns `null` — **fail closed** (drop the link, never leak).
+  - Applied to all four GETs (deliberate deviation from the "only getGames +
+    getGameByName" spec): game detail has no link fields (no-op), but **screenshots is a
+    paginated list whose `next` also carried the key** — the same helper cleans it free.
+  - Jackson 3 naming lesson: `TextNode` no longer exists in `tools.jackson.databind.node`
+    — it was renamed to `StringNode` (verified against the 3.0.4 jar after a compile
+    error; `instanceof StringNode` for text checks).
+  - Cosmetic: `builGameUrlById` → `buildGameUrlById` (private, one call site, atomic).
+- **Runtime receipts** (fresh boot; stale old-code backend killed first):
+  `/api/games?page=1` → `next` = `.../games?page=2&page_size=10`, no `key=`; `previous`
+  null; `/api/games-name?name=elder` → `next` clean; 10 results each. Frontend contract
+  `Boolean(data.next)` intact. `mvnw.cmd clean compile` passing (44 sources); `npm run
+  lint` (0 errors) + `npm run build` (51 modules).
+- **Explore is now fully closed.** Parked future ideas only: ExploreContext (explore
+  state surviving navigation — `ScrollToTop` must become restore-aware when it lands),
+  and the dev-only StrictMode cost (documented, not a bug).
+
+### 2026-10-25 — Community likes: unlike 401 diagnosed (backend only, not fixed)
+
+- **Symptom:** `POST /api/posts/{postId}/likes` works; `DELETE /api/posts/{postId}/likes`
+  returns `401 {"message":"Unauthorized"}`.
+- **Not an auth/route bug:** both verbs share the class mapping (`LikeController.java:16`),
+  both fall under `.anyRequest().authenticated()` (`SecurityConfig.java:38`), and CORS
+  already allows `DELETE` + `Authorization` (`SecurityConfig.java:55-56`). Like/unlike are
+  identical from the security chain's point of view.
+- **Root cause:** `LikeService.unlikePost` (`LikeService.java:38-45`) calls
+  `likeRepository.deleteByUserAndPost(...)` — a **derived delete** (`LikeRepository.java:13`)
+  — while `LikeService` has no `@Transactional` anywhere. `likePost` works because it uses
+  inherited `save()`, which `SimpleJpaRepository` implements transactionally. Verified
+  against the resolved jars: spring-data-jpa 4.1.1 `JpaQueryExecution$DeleteExecution` does
+  `Query.getResultList()` → `EntityManager.remove(...)` per row, and spring-data-commons
+  4.1.1 `RepositoryAnnotationTransactionAttributeSource` returns a **null** transaction
+  attribute when the derived method has no base-class implementation. So `remove` runs with
+  no active transaction → `TransactionRequiredException` ("No EntityManager with actual
+  transaction available for current thread").
+- **Why it surfaces as 401, not 500:** `GlobalExceptionHandler` maps only named exceptions
+  (no generic handler), so the transaction failure falls through to the servlet error
+  dispatch. Spring Boot applies the security chain to ERROR dispatches,
+  `JwtAuthenticationFilter` is a `OncePerRequestFilter` (skipped on error dispatches),
+  `/error` is not `permitAll`, and the entry point (`SecurityConfig.java:42-45`) writes 401.
+  Same mechanism as the duplicate-review 401 on 2026-10-22.
+- **Fix direction (not applied):** `@Transactional` on `unlikePost` (or class level),
+  matching `LibraryService.deleteEntry` / `ReviewService`. The service already builds a
+  `LikeResponse` that `LikeController` discards in favour of 204 — consistent with the
+  other DELETE endpoints, so only the transaction is required.
+- **Side observations:** `LikeRepository.deleteByUserAndPost` is the only derived delete in
+  the codebase; every other delete uses inherited `delete`/`deleteById` (transactional).
+  No frontend like code exists in `Frontend/src` — the flow was exercised directly against
+  the backend.
+
 ### Earlier
 
-- Frontend game discovery UI (ExplorePage, GameDetailsPage, GameCard, gameService).
+- Frontend game discovery UI (from the pre-pagination era: ExplorePage single fetch,
+  GameDetailsPage, GameCard, gameService).
 - Backend: PostgreSQL + Flyway, User entity/repo, registration, login verification,
   BCrypt, validation + exception handling, RAWG integration.
 
@@ -577,13 +734,23 @@ edit applied migrations.
 
 ## Not Built Yet
 
-- `Authorization` header on future feature calls (reviews) — `getCurrentUser` and `profileService` show the pattern.
+- ~~Explore infinite-scroll closure~~ — **closed 2026-10-24** (render fixes, Exercise 2
+  search-reset, Exercise 3 key-strip, perf fixes, device/runtime verification). Remaining
+  idea only: ExploreContext (state surviving navigation) — `<ScrollToTop>` must become
+  restore-aware when it lands.
+- Explore state surviving navigation (ExploreContext, recommended Option A) — behind the
+  closure items; `<ScrollToTop>` must become restore-aware when it lands.
+- `Authorization` header on future feature calls not yet built — `getCurrentUser`,
+  `profileService`, and `libraryService` show the pattern.
 - Personal game library — **Done end to end, runtime-verified** (backend endpoints, `libraryService.js`, `/library` page, add-to-library card on the details page; round-trip 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204 executed 2026-10-21 night).
 - Reviews — **Done end to end (Phase 6 closed 2026-10-23)**: backend runtime-verified
   (2026-10-22), front browser-verified for create/edit/duplicate-409/delete/signed-out
   prompt (2026-10-23). Optional polish ideas parked: delete the commented-out `<select>`
   + orphan `htmlFor` label in `ReviewSection.jsx`; read-only `StarRating` in review list
   items.
-- Community posts, likes, comments.
+- Community posts, likes, comments — **backend slice implemented but untracked and not
+  closed**: paged feed, post create/delete, comments, likes. `POST .../likes` works;
+  `DELETE .../likes` returns 401 (root cause diagnosed 2026-10-25: missing `@Transactional`
+  around the derived delete — not yet fixed). Frontend `/community` is still a stub.
 - Automated feature tests (backend and frontend).
 - Deployment configuration.
