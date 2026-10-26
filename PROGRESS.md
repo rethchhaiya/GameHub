@@ -3,10 +3,11 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-24 (Explore fully closed: render fixes verified, scroll-perf debugging
-re-run and closed — blur removal, `memo(GameCard)`, hover-shadow removal, observer race fix,
-`GameGrid` extracted — Exercise 3 done, RAWG `key=` stripped from `next`/`previous` with runtime
-receipts)
+Last updated: 2026-10-26 (Community slice audit + Explore scroll-lag fix: posts/comments/likes
+backend committed and V6 applied; `/community` renders a first-page feed with optimistic likes;
+the like-delete transaction fix is present in source; the author reports Explore scrolling lag
+fixed via `memo(GameGrid)`, RAWG 600×400 image crops, and a 500px `rootMargin`; build is green
+(55 modules) but lint fails on five unused imports; runtime re-check of unlike is still owed)
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -32,10 +33,10 @@ Root: `Frontend/`
 
 | File | What it does | Status |
 | --- | --- | --- |
-| `src/App.jsx` | Renders `BrowserRouter` + `AppRoute` | Done |
+| `src/App.jsx` | Renders `BrowserRouter` + `AppRoute`; **also mounts `ScrollToTop` and imports `Feed` without using it** — the import is one of 4 current lint errors, and `ScrollToTop` is mounted here *and* in `AppRoute` (duplicate effect) | Done — cleanup owed (2026-10-26) |
 | `src/main.jsx` | Mounts the app; wraps `<App/>` in `<AuthProvider>` | Done |
 | `src/routes/index.jsx` | Route table nested under a layout route; `/library` and `/profile` wrapped in `PrivateRoute` | Done |
-| `src/components/ScrollToTop.jsx` | Reads `useLocation().pathname`, `window.scroll({top:0})`-`instant` in a `[pathname]` effect, renders `null`; bugs fixed during review: `pathName` → `pathname` casing (effect never fired before) | Done — mounted above `<Routes>` in `AppRoute` (routes/index.jsx); lint/build passing (2026-10-24) |
+| `src/components/ScrollToTop.jsx` | Reads `useLocation().pathname`, `window.scroll({top:0})`-`instant` in a `[pathname]` effect, renders `null`; bugs fixed during review: `pathName` → `pathname` casing (effect never fired before) | Done — mounted above `<Routes>` in `AppRoute` (routes/index.jsx) **and again in `App.jsx`** (duplicate mount found 2026-10-26; harmless but redundant) |
 | `src/components/layouts/MainLayout.jsx` | Navbar + `<Outlet/>` + Footer; flex column pins footer | Done |
 | `src/components/layouts/Navbar.jsx` | Brand, nav links (active highlight), responsive hamburger menu, auth links, Profile link when logged in | Done |
 | `src/components/layouts/Footer.jsx` | Copyright + RAWG attribution, responsive | Done |
@@ -45,13 +46,13 @@ Root: `Frontend/`
 | File | Route | What it does | Status |
 | --- | --- | --- | --- |
 | `src/pages/HomePage.jsx` | `/home` | Hero, CTA to Explore, three feature cards | Done |
-| `src/pages/ExplorePage.jsx` | `/explore` | Game grid with **pagination + IntersectionObserver infinite scroll**: `[page]` effect appends page results (dedupe by `id`), `hasMore` from `data.next`, sentinel `div` + observer (`rootMargin: 400px`); `loadMore` guarded by `busyRef` — flipped **synchronously in the callback** (double-fire race closed), re-normalized by the ref-sync effect; `handleSearch` (by name replaces results + `hasMore=false`; empty term resets page 1); `loadMode` (`"initial"`/`"append"`/`null`) gates both loader lines while the grid stays mounted — **scroll-jump fixed**; observer cleanup fixed to `observer.disconnect()` | Done — author-verified smooth scrolling/append on device (2026-10-24) |
+| `src/pages/ExplorePage.jsx` | `/explore` | Game grid with **pagination + IntersectionObserver infinite scroll**: `[page]` effect appends page results (dedupe by `id`), `hasMore` from `data.next`, sentinel `div` + observer (`rootMargin: 500px` in the uncommitted working copy; HEAD has `300px` — part of the scroll-lag fix); `loadMore` guarded by `busyRef` — flipped **synchronously in the callback** (double-fire race closed), re-normalized by the ref-sync effect; `handleSearch` (by name replaces results + `hasMore=false`; empty term resets page 1); `loadMode` (`"initial"`/`"append"`/`null`) gates both loader lines while the grid stays mounted — **scroll-jump fixed**; observer cleanup fixed to `observer.disconnect()`. **Also imports `ScrollToTop` but never renders it (unused → lint error); `ScrollToTop` is already mounted globally, so this import should be removed** | Done — scroll-lag fix author-reported 2026-10-26; earlier smooth-scroll verification 2026-10-24 |
 | `src/pages/GameDetailsPage.jsx` | `/game/:id` | Redesigned hero + two-column layout; details, genres/devs/publishers/platforms; screenshot gallery + lightbox (arrows, Esc, click-out); "Your library" card (status select → `addToLibrary`, 409 + signed-out states) | Done |
 | `src/pages/LoginPage.jsx` | `/login` | Login form → `loginUser` → destructure `{token, user}` → `login(user, token)` → `navigate('/home')`; error display | Done |
 | `src/pages/RegisterPage.jsx` | `/register` | Register form + confirm-password check → `registerUser` → `login(user, token)` → `navigate('/home')` | Done |
 | `src/pages/ProfilePage.jsx` | `/profile` | Protected; loads the current profile (404 → empty form), edits `bio`/`avatarUrl`, live avatar preview, saves via `updateProfile`, error/success banners | Done |
 | `src/pages/MyLibraryPage.jsx` | `/library` | Protected; loads entries, loading/error/empty states, per-entry status `<select>` → PUT, inline delete confirmation, busy guard | Done |
-| `src/pages/CommunityPage.jsx` | `/community` | Placeholder | Stub |
+| `src/pages/CommunityPage.jsx` | `/community` | Public route; renders `<Feed/>`. Only the first 10 posts load (no load-more), and there is no post composer, comments UI, or delete UI yet | Partial (2026-10-26) |
 
 `/` redirects to `/home` with `replace`.
 
@@ -60,11 +61,15 @@ Root: `Frontend/`
 | File | What it does | Status |
 | --- | --- | --- |
 | `src/components/games/GameCard.jsx` | Redesigned reusable card: artwork overlay, rating/Metacritic badges (**`backdrop-blur` removed** — recomposites every scroll frame), ratings count, year, up to two genres, hover CTA; hover is lift + lime border (**big soft shadow removed** — paint-expensive while cards slide under the cursor during scroll); **`memo`-wrapped** so appends re-render only the new cards | Done (2026-10-24) |
-| `src/components/games/GameGrid.jsx` | Reusable responsive game grid (authored by the author, extracted from ExplorePage): renders `GameCard`s with the 1/2/3/4-col classes; consumed by `ExplorePage` | Done (2026-10-24) |
-| `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend | Done |
+| `src/components/games/GameGrid.jsx` | Reusable responsive game grid (authored by the author, extracted from ExplorePage): renders `GameCard`s with the 1/2/3/4-col classes; consumed by `ExplorePage`. Working-tree change wraps it in `memo` (uncommitted) | Done (2026-10-24); `memo(GameGrid)` uncommitted (2026-10-26) |
+| `src/components/Feed.jsx` | Community feed: loads `getFeed(0, 10)` on mount, module-level `globalFeedCache` survives navigation and skips the refetch, maps posts to `PostCard`; basic loading/error text, no empty state, no pagination | Partial (2026-10-26) |
+| `src/components/PostCard.jsx` | One community post: author + content + comment count; optimistic like button with per-post 800 ms debounce queue, `globalLikeState` cache surviving unmount, redirect to `/login` when `isLoggedIn()` is false; registers a `beforeunload` flush listener per card (see defects in Work Log) | Partial (2026-10-26) |
+| `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend; `fetchGames(page)` drives infinite scroll. Uncommitted working-tree change adds `optimizedImageUrl(url, 600, 400)` (rewrites `/media/` → `/media/crop/600/400/` with a null guard) and maps each result; the dead cache block is gone. This is part of the scroll-lag fix (smaller images decode/paint faster). Parses and builds | Done; image-crop optimization uncommitted (2026-10-26) |
 | `src/services/libraryService.js` | `getLibrary`, `addToLibrary` (POST), `updateStatus` (PUT), `deleteFromLibrary` (DELETE; handles 204); attach `Authorization`; normalized errors with `status`/`fieldErrors` | Done |
 | `src/constants/libraryStatuses.js` | Single source for the four status `{ value, label }` options (library page + details page) | Done |
-| `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token) | Done |
+| `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token), `isLoggedIn()` (token-presence check used by the like button). **Stray unused `import ExplorePage` at the top is one of 4 current lint errors** | Done — lint cleanup owed (2026-10-26) |
+| `src/services/apiService.js` | Central `apiRequest(path, options)` fetch helper: prefixes `VITE_API_BASE_URL`, always sets `Content-Type`, attaches `Bearer` when a token exists, throws `Error(message)` on non-2xx, returns `null` on 204. Does **not** attach `status`/`fieldErrors` like the older services do | Done (2026-10-26) |
+| `src/services/communityService.js` | Community API surface: `getFeed(page, size)`, `createPost`, `deletePost`, `getComments`, `addComment`, `deleteComment`, `likePost`, `unLikePost` — all via `apiRequest`. Only `getFeed`, `likePost`, `unLikePost` are currently consumed; `deleteComment(postId)` targets `/posts/{postId}/comments` (DELETE) while the backend exposes `DELETE /api/comments/{id}` — unused, but wrong | Partial (2026-10-26) |
 | `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
 | `src/services/reviewService.js` | `getReviewByGame(rawgId)` (GET `/review?rawgId=`), `createReview` (POST), `updateReview` (PUT), `deleteReview` (DELETE with 204 guard → `null`); all attach `Authorization`; normalized errors (`status`/`fieldErrors`) — authored through 4 coaching rounds: headers nesting, correct query-param URL (path vs query lesson), no-swallow error deal (services throw → components catch; catch must rethrow), `JSON.stringify(userData)` single-arg (second arg is a replacer filter), `${reviewId}` template var, 204 no-body guard | Done |
 | `src/components/reviews/ReviewSection.jsx` | Reviews on `/game/:id`: load-on-mount (loading/error/empty/list), signed-out prompt, form (star rating component + textarea) for create **and** edit (`editingId` — one form, two jobs), 409/400 error mapping, server-response list updates (add/replace/filter), author-only Edit/Delete with `busyId` guard; `StarRating` sub-component (hover preview, 1–5 buttons, unused `readOnly` prop parked as a free hook for list rendering) | Done — browser-verified: create/edit/duplicate-409/delete/signed-out prompt (2026-10-23) |
@@ -87,10 +92,16 @@ Root: `Frontend/`
 
 ```powershell
 cd Frontend
-npm run lint      # ESLint — passing
-npm run build     # Vite production build — passing
+npm run lint      # ESLint — FAILING (5 no-unused-vars, re-run 2026-10-26 after the scroll fix)
+npm run build     # Vite production build — passing (55 modules, re-run 2026-10-26)
 npm run dev       # dev server
 ```
+
+Current lint errors (2026-10-26): `App.jsx:5` unused `Feed` import; `PostCard.jsx:1` unused
+`useRef`; `PostCard.jsx:2` unused `data`; `authService.js:1` unused `ExplorePage` import;
+`ExplorePage.jsx:4` unused `ScrollToTop` import (added during the scroll-lag fix, but
+`ScrollToTop` is already mounted globally — remove the import or actually render it).
+The uncommitted image-crop change in `gameService.js` parses and builds.
 
 ---
 
@@ -109,14 +120,14 @@ Root: `Backend/`
 | `.../dto/AuthResponse.java` | `{ token, user }` response body for register/login | Done |
 | `.../services/UserService.java` | Register (hash + save) and login (verify) logic | Done |
 | `.../controllers/AuthController.java` | `POST /api/auth/register`, `POST /api/auth/login` — both return `AuthResponse` (`{ token, user }`) via injected `JwtService` | Done |
-| `.../controllers/GlobalExceptionHandler.java` | Maps errors to 400 (`MethodArgumentNotValidException`, `IllegalArgumentException`), 401, 404 (`ResourceNotFoundException`), 409 | Done |
+| `.../controllers/GlobalExceptionHandler.java` | Maps errors to 400 (`MethodArgumentNotValidException`, `IllegalArgumentException`), 401, 403 (`UnauthorizedPostDeletionException`, `UnauthorizedCommentDeletionException`), 404 (`ResourceNotFoundException`), 409 (email/review/library duplicates). No generic fallback handler — unexpected exceptions surface via the security error dispatch (the 401-masquerade trap) | Done |
 | `.../exception/InvalidCredentialsException.java` | Invalid login credentials | Done |
 | `.../exception/EmailAlreadyExistsException.java` | Duplicate email | Done |
 | `.../PasswordConfig.java` | `BCryptPasswordEncoder` bean (root package, not a `config/` package) | Done |
 | Game endpoints (`/api/games`, `/api/games-name`, `/api/games/{id}`, `/api/games/{id}/screenshots`) | Proxy RAWG through Spring Boot; **Exercise 3 (2026-10-24)**: `key=` stripped from `next`/`previous` URLs (`stripRawgKeyFromLinks` + `java.net.URI`-based `removeKeyParam`, fail-closed on malformed URLs) — applied to all four GETs (deliberate spec deviation: screenshots lists also carried the key) | Done — runtime-verified 2026-10-24 |
 | `resources/db/migration/V1__create_users_table.sql` | Creates `users` table | Done |
 | `resources/application.properties` | DB config, `ddl-auto=none`, RAWG key from env, JWT config (`jwt.secret`, `jwt.expiration-ms`) | Done |
-| `.../config/SecurityConfig.java` | `SecurityFilterChain`: public game/auth paths `permitAll`, rest `authenticated`, stateless, CSRF off; `CorsConfigurationSource` bean (origin 5173, `/api/**`) wired explicitly via `.cors(cors -> cors.configurationSource(...))`; 401 JSON entry point; JWT filter registered via `addFilterBefore` | Done |
+| `.../config/SecurityConfig.java` | `SecurityFilterChain`: public game/auth paths **and `GET /api/posts/**`** (feed + comments readable signed out) `permitAll`, rest `authenticated`, stateless, CSRF off; `CorsConfigurationSource` bean (origin 5173, `/api/**`) wired explicitly via `.cors(cors -> cors.configurationSource(...))`; 401 JSON entry point; JWT filter registered via `addFilterBefore` | Done — public GET added 2026-10-26 (e9e1c9a) |
 | `.../services/JwtService.java` | Sign (`generateToken`) and verify (`parseToken`) HS256 tokens | Done |
 | Pom dependencies | `spring-boot-starter-security` + jjwt 0.12.6 (`jjwt-api`/`jjwt-impl`/`jjwt-gson`) | Done |
 | `.../security/JwtAuthenticationFilter.java` | Reads `Authorization: Bearer`, parses via `JwtService`, loads user via `UserService.findById`, sets `SecurityContextHolder`; fail-safe on invalid token; registered in `SecurityConfig` via `addFilterBefore` | Done |
@@ -146,11 +157,13 @@ Root: `Backend/`
 | `.../services/ReviewService.java` | `createReview(User user, …)` — duplicate guard (`existsByUserIdAndRawgId` → 409) before save; `getReviewById`, `getAllReviews`, `getReviewByUser`, `getReviewByRawgId`; `updateReview`/`deleteReview` via shared `getOwnedReview` (missing **or not-owned** → 404) — library's house pattern; `toResponse` mapper; principal `User` passed in, no `userRepository` dependency | Done |
 | `.../controllers/ReviewController.java` | `POST /api/review` (201 + `@Valid`), `GET /api/review/{id}`, `GET /api/review` (`?userId=`/`?rawgId=` optional filters), `PUT /api/review/{id}`, `DELETE /api/review/{id}` (204); `@AuthenticationPrincipal User user` on all mutations | Done |
 | `.../exception/ReviewAlreadyExistsException.java` | Duplicate `(user_id, rawg_id)` review → 409 | Done |
-| `.../entity/Post.java`, `Comment.java`, `Like.java` | Mapped to `posts`/`comments`/`likes` (`V6__create_community_tables.sql`, untracked): `@ManyToOne` + `@JoinColumn` → `user`/`post`, `@CreationTimestamp`; `Like` declares `UNIQUE (post_id, user_id)` | Partial — untracked working tree |
-| `.../repository/PostRepository.java`, `CommentRepository.java`, `LikeRepository.java` | Feed `findAllByOrderByCreatedAtDesc`; comments `findAllByPostOrderByCreatedAtAsc` + `countByPost`; likes `existsByUserAndPost`, `countByPost`, and a **derived `deleteByUserAndPost`** (the only derived delete in the codebase) | Partial — untracked |
-| `.../services/PostService.java`, `CommentService.java` | Feed/create/delete post (author-only → 403); comments list/add/delete (comment author or post owner); counts folded into `PostResponse` (`likeCount`, `commentCount`, `likedByCurrentUser`) | Partial — untracked; not runtime-verified |
-| `.../services/LikeService.java` | `likePost` (exists-check then inherited `save`), `unlikePost` (**derived `deleteByUserAndPost`**, no `@Transactional`), shared `buildResponse` | **Broken** — unlike → 401, diagnosed 2026-10-25 (Work Log); like POST works |
-| `.../controllers/PostController.java`, `CommentController.java`, `CommentDeleteController.java`, `LikeController.java` | `GET/POST /api/posts`, `DELETE /api/posts/{id}`, `GET/POST /api/posts/{postId}/comments`, `DELETE /api/comments/{id}`, `POST/DELETE /api/posts/{postId}/likes`; principal via `@AuthenticationPrincipal` | Partial — untracked; like POST works, like DELETE broken |
+| `.../entity/Post.java`, `Comment.java`, `Like.java` | Mapped to `posts`/`comments`/`likes` (V6): `@ManyToOne` + `@JoinColumn` → `user`/`post`, `@CreationTimestamp`; `Like` declares `UNIQUE (post_id, user_id)`; Lombok `@Data`/`@NoArgsConstructor` with association excludes. `Post.updatedAt` also uses `@CreationTimestamp` (no update flow exists, so it never changes) | Done (committed c28f123) |
+| `.../repository/PostRepository.java`, `CommentRepository.java`, `LikeRepository.java` | Feed `findAllByOrderByCreatedAtDesc(Pageable)`; comments `findAllByPostOrderByCreatedAtAsc` + `countByPost`; likes `existsByUserAndPost`, `countByPost`, and a **derived `deleteByUserAndPost`** (the only derived delete in the codebase — needs the caller's transaction) | Done (committed c28f123) |
+| `.../services/PostService.java`, `CommentService.java` | Feed/create/delete post (author-only → 403); comments list/add/delete (comment author or post owner → 403); counts folded into `PostResponse` (`likeCount`, `commentCount`, `likedByCurrentUser`); `toResponse` null-guards `currentUser` for the public feed (`likedByCurrentUser=false` signed out — e9e1c9a). `PostResponse.userAvatarUrl` exists but is never populated | Done — source complete; posts/comments not runtime-recorded |
+| `.../services/LikeService.java` | `likePost` (exists-check then inherited `save`), `unlikePost` (derived `deleteByUserAndPost`), shared `buildResponse`. **`@Transactional` is present on `unlikePost` (LikeService.java:39)** — the 2026-10-25 fix direction is already in source | Source fixed (shipped in c28f123); runtime re-check of DELETE owed — last recorded receipt is still the 2026-10-25 401 |
+| `.../controllers/PostController.java`, `CommentController.java`, `CommentDeleteController.java`, `LikeController.java` | `GET/POST /api/posts`, `DELETE /api/posts/{id}`, `GET/POST /api/posts/{postId}/comments`, `DELETE /api/comments/{id}`, `POST/DELETE /api/posts/{postId}/likes`; principal via `@AuthenticationPrincipal`, `@Valid` bodies. POST/create endpoints return **200**, not 201; comment delete lives on a separate `/api/comments` controller | Done (committed c28f123); like POST verified 2026-10-25 |
+| `.../exception/UnauthorizedPostDeletionException.java`, `UnauthorizedCommentDeletionException.java` | Author-only post delete / comment author-or-post-owner delete → 403 via `GlobalExceptionHandler` | Done (committed c28f123) |
+| `.../models/Game.java` | Legacy plain POJO (`name`, `rating`, `backgroundImage`) — **unused**; `GameService` returns RAWG `JsonNode` directly | Dead code |
 
 ### Backend check
 
@@ -184,14 +197,14 @@ cd Backend
 | GET | `/api/review?userId=` / `?rawgId=` / none | Done — filtered lists (newest-first), unfiltered `getAllReviews` |
 | PUT | `/api/review/{id}` | Done — runtime-verified (`@PathVariable` + `@Valid` body → 200; missing/unowned → 404). Body is `ReviewUpdateRequest` (`rating` + `content` only) since 2026-10-23 — `rawgId` removed from the PUT contract because the service never read it and edit must never re-point a review at another game |
 | DELETE | `/api/review/{id}` | Done — runtime-verified (→ 204; entry disappears from `?rawgId=` list) |
-| GET | `/api/posts?page=&size=` | Implemented (untracked) — paged feed, newest first |
-| POST | `/api/posts` | Implemented (untracked) — `@Valid` body → 200 `PostResponse` |
-| DELETE | `/api/posts/{id}` | Implemented (untracked) — author-only → 204; unowned → 403 |
-| GET | `/api/posts/{postId}/comments` | Implemented (untracked) — paged, oldest first |
-| POST | `/api/posts/{postId}/comments` | Implemented (untracked) |
-| DELETE | `/api/comments/{id}` | Implemented (untracked) — comment author or post owner → 204 |
-| POST | `/api/posts/{postId}/likes` | Implemented — works (author-reported 2026-10-25) |
-| DELETE | `/api/posts/{postId}/likes` | **Broken — returns 401**; root cause diagnosed 2026-10-25: missing `@Transactional` around the derived delete (Work Log) |
+| GET | `/api/posts?page=0&size=10` | Implemented (committed) — **public** (`permitAll`), Spring `Page<PostResponse>` newest-first; `likedByCurrentUser` is false when signed out |
+| POST | `/api/posts` | Implemented (committed) — requires token, `@Valid` body → **200** `PostResponse` (not 201) |
+| DELETE | `/api/posts/{id}` | Implemented (committed) — author-only → 204; unowned → 403; missing → 404 |
+| GET | `/api/posts/{postId}/comments?page=0&size=20` | Implemented (committed) — **public**, paged oldest-first |
+| POST | `/api/posts/{postId}/comments` | Implemented (committed) — requires token, `@Valid` body → **200** `CommentResponse` |
+| DELETE | `/api/comments/{id}` | Implemented (committed) — comment author or post owner → 204; otherwise 403; note the path is `/api/comments/{id}`, not nested under the post |
+| POST | `/api/posts/{postId}/likes` | Implemented — works (author-reported 2026-10-25); returns `LikeResponse` 200 |
+| DELETE | `/api/posts/{postId}/likes` | Source fixed — `@Transactional` now on `LikeService.unlikePost` (LikeService.java:39); **runtime re-check still owed** (last receipt was the 2026-10-25 401) |
 
 ---
 
@@ -202,9 +215,9 @@ cd Backend
 | `users` table (`V1__create_users_table.sql`) | `id`, `username` (unique), `email` (unique), `password_hash`, `created_at` | Done |
 | `profiles` table (`V2__create_profiles_table.sql`) | `id`, `user_id` (FK → `users.id`, unique, cascade delete), `bio`, `avatar_url`, `created_at` | Done |
 | `library_entries` table (`V3__create_library_entries_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `game_name`, `game_image` (TEXT), `status` (CHECK: PLAYING/COMPLETED/PLAN_TO_PLAY/DROPPED), `added_at`, composite `UNIQUE (user_id, rawg_id)` — file later fixed (duplicate name + `entiries` spelling) with the DB checksum re-synced via `flyway:repair` | Done |
-| rename library constraint (`V4__rename_library_constraint.sql`) | `ALTER TABLE ... RENAME CONSTRAINT uq_library_entiries_user_game TO uq_library_entries_user_game` — the live constraint now has the correct name; DB is at Flyway version 4 | Done |
-| `reviews` table (`V5__create_reviews_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `rating` (CHECK 1–5), `content` (TEXT NOT NULL), `created_at`, `UNIQUE (user_id, rawg_id)` → duplicate review 409; lean design: no cached game fields (reviews render on `/game/:id`, which already has RAWG data) — and author-verified 2026-10-22 after three review rounds (round 1 junk: broken `DEFAULT` word, camelCase column, missing UNIQUE; round 2: rating column lost, `DEFAULTW`, constraint liIs about its name) | Partial — migration file Done (reviewed), **not yet applied to the live DB; first task when back: boot and watch for "Successfully applied 1 migration: V5"** |
-| `posts` / `comments` / `likes` tables (`V6__create_community_tables.sql`) | Untracked migration: `posts` (user FK, `content`, `image_url`, `created_at`), `comments` (post + user FK, `content`, `created_at`), `likes` (post + user FK, `UNIQUE (post_id, user_id)`); indexes on `posts.created_at`, `comments.post_id`, `likes.post_id` | Partial — file present (untracked); `likes` table confirmed reachable because `POST .../likes` persists a like |
+| rename library constraint (`V4__rename_library_constraint.sql`) | `ALTER TABLE ... RENAME CONSTRAINT uq_library_entiries_user_game TO uq_library_entries_user_game` — the live constraint now has the correct name | Done (live DB is now at version 6) |
+| `reviews` table (`V5__create_reviews_table.sql`) | `id` (IDENTITY), `user_id` (FK → `users.id`, cascade delete), `rawg_id` (INTEGER), `rating` (CHECK 1–5), `content` (TEXT NOT NULL), `created_at`, `UNIQUE (user_id, rawg_id)` → duplicate review 409; lean design: no cached game fields (reviews render on `/game/:id`, which already has RAWG data) — author-verified after three review rounds | Done — applied **2026-10-22 02:07:51** (`flyway:info`, re-checked 2026-10-26) |
+| `posts` / `comments` / `likes` tables (`V6__create_community_tables.sql`) | `posts` (user FK, `content`, `image_url VARCHAR(255)`, `created_at`, `updated_at`), `comments` (post + user FK, `content`, `created_at`), `likes` (post + user FK, `created_at`, `UNIQUE (post_id, user_id)`); indexes on `posts.created_at`, `comments.post_id`, `likes.post_id` | Done — committed c28f123, applied **2026-10-25 02:11:57**; live `flyway:info` on 2026-10-26 reports schema version **6**, all migrations Success |
 
 Migrations are managed by Flyway. Create a new migration for any schema change — do not
 edit applied migrations.
@@ -252,7 +265,7 @@ edit applied migrations.
 | Frontend | `npm run lint` + `npm run build` after the library page, add-to-library card, GameCard/GameDetailsPage redesigns, and inline delete confirmation | Passing — 47 modules (2026-10-21) |
 | Frontend | `npm run lint` + `npm run build` after the review feature (reviewService + ReviewSection + GameDetailsPage wiring) | Passing — 49 modules (2026-10-22) |
 | Reviews | Backend technique for author display: `userName` added to `ReviewResponse` (second entity field `username`, `toResponse` updated atomically — positional `@AllArgsConstructor` mismatch caught by compile) — verified in live JSON `"userName":"Reth Chhaiya"` | Done (2026-10-22) |
-| Reviews | Frontend review section code-complete; **not yet exercised in the browser** — next session first task: manual test on `/game/:id` (load, post fresh 201, duplicate 409 inline, edit, delete, signed-out prompt, 400 messages), then `npm run lint` + build re-check | Partial |
+| Reviews | Frontend review section browser walkthrough on `/game/:id` (load, create, duplicate 409 inline, edit, delete, signed-out prompt) | Success — see the 2026-10-23 walkthrough row below |
 | Library | Full runtime round-trip against Neon: add (201) → duplicate (409) → GET (200) → PUT status (200) → DELETE (204) | Success (manual, author-verified 2026-10-21 night) — Phase 5 closed |
 | Database | V5 migration applied and live; boot validates 5 migrations ("Successfully validated 5 migrations… schema up to date") — V5 itself had been applied by an earlier boot the same day | Done (2026-10-22) |
 | Backend | `mvnw.cmd clean compile` with the review slice complete (entity/repo/DTOs/service/controller + exception) | Passing — 43 sources (2026-10-22) |
@@ -267,7 +280,15 @@ edit applied migrations.
 | Games | Exercise 3 re-verified on a **fresh boot** (first probe hit a stale old-code backend holding :8080 — killed, re-ran): `GET /api/games?page=1` → `next` = `.../games?page=2&page_size=10` with **no `key=`**, `previous` `null` clean; `/api/games-name?name=elder` → `next` also clean; 10 results each; `Boolean(next)` frontend contract intact | Success (runtime, 2026-10-24) |
 | Testing | `curl.exe` with JSON body through PowerShell 5.1 produced phantom 401s — broken `Authorization` header from PS's arg-quote mangling (body without embedded quotes worked; `Invoke-RestMethod` unaffected). Backend was fine both times | Diagnosis note (2026-10-22) |
 | Likes | `POST /api/posts/{postId}/likes` (author test) | Works — like persisted; endpoint returns `LikeResponse` |
-| Likes | `DELETE /api/posts/{postId}/likes` (author test) | **Bug — 401 `{"message":"Unauthorized"}`**. Diagnosed 2026-10-25, not fixed: `LikeService.unlikePost` calls the derived `LikeRepository.deleteByUserAndPost` with no `@Transactional`; the derived delete runs `EntityManager.remove` (verified in spring-data-jpa 4.1.1 bytecode) and throws `TransactionRequiredException`, which escapes the unhandled exception path into the security error dispatch → custom entry point 401. Fix direction: `@Transactional` on `unlikePost`/class |
+| Likes | `DELETE /api/posts/{postId}/likes` (author test, 2026-10-25) | **Bug — 401 `{"message":"Unauthorized"}`**. Root cause: `LikeService.unlikePost` called the derived `LikeRepository.deleteByUserAndPost` with no `@Transactional`; the derived delete runs `EntityManager.remove` (verified in spring-data-jpa 4.1.1 bytecode) and throws `TransactionRequiredException`, which escapes the unhandled exception path into the security error dispatch → custom entry point 401 |
+| Likes | `DELETE /api/posts/{postId}/likes` re-check (2026-10-26) | **Source fixed** — `@Transactional` is on `LikeService.unlikePost` (`LikeService.java:39`), imported from `org.springframework.transaction.annotation`; shipped in c28f123. No runtime re-verification is recorded after the fix |
+| Community | Backend slice committed (posts/comments/likes + V6 + 403 exceptions + public GET feed) | Committed c28f123 (2026-10-25); like POST runtime-verified, post/comment/like-delete runtime receipts not recorded |
+| Database | `flyway:info` against Neon (credentials via temp config, secrets not printed) | Schema version **6**; V1–V6 all `Success`; V6 installed 2026-10-25 02:11:57 (2026-10-26 re-check) |
+| Backend | `mvnw.cmd clean compile` with the whole current backend (auth, library, reviews, community) | Passing (2026-10-26) |
+| Explore | Scroll-lag fix (author-reported 2026-10-26): `memo(GameGrid)`, RAWG image URLs rewritten to 600×400 crops in `gameService.js`, `rootMargin` 300 → 500 | **Author reports lag fixed** — uncommitted working tree; no independent browser/long-scroll measurement recorded |
+| Frontend | `npm run lint` | **Failing — 5 errors** (`no-unused-vars`): `App.jsx:5` `Feed`, `PostCard.jsx:1` `useRef`, `PostCard.jsx:2` `data`, `ExplorePage.jsx:4` `ScrollToTop`, `authService.js:1` `ExplorePage` (re-run 2026-10-26 after the scroll fix) |
+| Frontend | `npm run build` | Passing — 55 modules (re-run 2026-10-26 with the uncommitted scroll-lag changes) |
+| Frontend | Community feed/like browser walkthrough | **Not recorded** — feed GET + like POST/DELETE need a manual pass; the like queue/unload flush has known defects (Work Log) |
 
 ---
 
@@ -690,7 +711,7 @@ edit applied migrations.
   state surviving navigation — `ScrollToTop` must become restore-aware when it lands),
   and the dev-only StrictMode cost (documented, not a bug).
 
-### 2026-10-25 — Community likes: unlike 401 diagnosed (backend only, not fixed)
+### 2026-10-25 — Community backend committed; unlike 401 diagnosed (fix present in c28f123)
 
 - **Symptom:** `POST /api/posts/{postId}/likes` works; `DELETE /api/posts/{postId}/likes`
   returns `401 {"message":"Unauthorized"}`.
@@ -714,14 +735,97 @@ edit applied migrations.
   `JwtAuthenticationFilter` is a `OncePerRequestFilter` (skipped on error dispatches),
   `/error` is not `permitAll`, and the entry point (`SecurityConfig.java:42-45`) writes 401.
   Same mechanism as the duplicate-review 401 on 2026-10-22.
-- **Fix direction (not applied):** `@Transactional` on `unlikePost` (or class level),
-  matching `LibraryService.deleteEntry` / `ReviewService`. The service already builds a
-  `LikeResponse` that `LikeController` discards in favour of 204 — consistent with the
-  other DELETE endpoints, so only the transaction is required.
+- **Fix (present in the same commit):** `@Transactional` is already declared on
+  `LikeService.unlikePost` (`LikeService.java:39`), matching `LibraryService.deleteEntry` /
+  `ReviewService`. `git show c28f123` confirms the annotation was in the file when the
+  community slice was committed, so the "not fixed" wording in the earlier audit was stale.
+  A **runtime re-check of DELETE is still owed** — no post-fix receipt was recorded.
+- **Committed alongside the diagnosis (c28f123, 2026-10-25 20:59):** the whole community
+  backend (Post/Comment/Like entities, repositories, DTOs, services, four controllers,
+  two 403 exceptions + handlers), `V6__create_community_tables.sql`, plus Explore/GameGrid
+  changes and the PROGRESS update. `flyway:info` later showed V6 installed 2026-10-25
+  02:11:57 (before the evening commit).
 - **Side observations:** `LikeRepository.deleteByUserAndPost` is the only derived delete in
   the codebase; every other delete uses inherited `delete`/`deleteById` (transactional).
-  No frontend like code exists in `Frontend/src` — the flow was exercised directly against
-  the backend.
+  Community frontend like code arrived the next day in e9e1c9a (`PostCard.jsx`).
+
+### 2026-10-26 — Community feed frontend + full docs re-audit
+
+- Commit e9e1c9a ("Community page survive navigation") added: `services/apiService.js`
+  (central fetch + `VITE_API_BASE_URL` + `Bearer` attachment + 204 handling),
+  `services/communityService.js` (8 community calls), `components/Feed.jsx`,
+  `components/PostCard.jsx`, `CommunityPage` now renders `<Feed/>` (no longer a stub),
+  `authService.isLoggedIn()`, `SecurityConfig` public `GET /api/posts/**`, and a
+  `PostService.toResponse` null-guard so the feed works signed out.
+- **Feed behavior:** module-level `globalFeedCache` survives navigation and skips the
+  refetch; only page 0 / size 10 is requested (no load-more). Loading text + generic error
+  text exist; no empty state.
+- **Like flow:** optimistic toggle → `globalLikeState` map survives unmount → per-post
+  800 ms debounce (`globalLikeQueue` / `globalTimeOuts`) → `POST`/`DELETE`; clicking back
+  to the server state clears the pending timer; failures only `console.error` (no rollback,
+  no error banner). A `beforeunload` listener is registered per card to flush pending
+  likes.
+- **Known defects (recorded, intentionally not fixed in this docs-only pass):**
+  1. `flushQueueBeforeUnload` fetches a relative `/posts/{postId}/likes` — no
+     `VITE_API_BASE_URL` prefix and no `Authorization` header — so the unload flush hits
+     the Vite origin and cannot authenticate. The "survive unload" path is effectively dead.
+  2. `communityService.deleteComment(postId)` calls `DELETE /posts/{postId}/comments`;
+     the backend endpoint is `DELETE /api/comments/{id}`. Unused today, but wrong.
+  3. `PostCard` imports unused `useRef` and `data`, renders a `<p>` inside a `<p>`, never
+     populates its `error` state, and does not revert the optimistic like on failure.
+  4. `apiService` throws plain `Error(message)` — it drops the `status` / `fieldErrors`
+     convention every older service attaches, so future 401/400 UI cannot branch on it.
+  5. `App.jsx` imports `Feed` without using it and mounts `ScrollToTop` even though
+     `AppRoute` already mounts it (duplicate mount/effect).
+  6. `authService.js` still carries a stray unused `ExplorePage` import.
+  7. `globalFeedCache` / `globalLikeState` are not keyed by user and are never invalidated
+     on logout — switching accounts can briefly show the previous user's like state.
+- **Not built in the community UI:** post composer, comments list/form, post/comment
+  delete UI, and pagination. `createPost`, `deletePost`, `getComments`, `addComment`, and
+  `deleteComment` exist in the service but have no consumers.
+- **Verification receipts this session (2026-10-26):**
+  - Backend `.\mvnw.cmd clean compile` → passing.
+  - Frontend `npm run build` → passing, 55 modules. An intermediate uncommitted
+    `gameService.js` edit briefly broke parsing (`Unexpected token` at line 21); it was fixed
+    during the session, and the final re-run is green with that change present.
+  - Frontend `npm run lint` → **failing, 5 errors** (`no-unused-vars` only; see Frontend
+    checks above). The transient parse error disappeared with the fixed `gameService.js`;
+    the scroll-lag fix later added one more unused import (`ScrollToTop` in `ExplorePage`).
+  - `flyway:info` → schema version 6; V1–V6 all `Success`; V6 installed 2026-10-25
+    02:11:57.
+  - Working tree: `GameGrid.jsx` (uncommitted `memo(GameGrid)`), `ExplorePage.jsx`
+    (`rootMargin` 300 → 500, uncommitted), and `gameService.js` (uncommitted RAWG image-crop
+    helper + reformatting). Branch is `master`, ahead of `origin/master` by 1 commit
+    (e9e1c9a).
+  - **`gameService.js` working-tree change:** adds `optimizedImageUrl(url, width=600,
+    height=400)` (rewrites `/media/` to `/media/crop/{w}/{h}/`) and returns
+    `{ ...data, results: data.results.map(...) }`, dropping the old commented-out cache.
+    It adds no lint errors and builds.
+- **Docs re-audited against code:** reviews marked closed end to end, community slice marked
+  committed/partial (no longer "untracked"), V5/V6 marked applied, like DELETE marked
+  source-fixed with runtime re-check owed, and both `PROGRESS.md` + `plan.md` refreshed.
+  `PROGRESS.md` previously said community was untracked and the unlike fix was missing;
+  both were stale relative to commits c28f123/e9e1c9a.
+
+### 2026-10-26 — Explore scroll-lag fix (author-reported)
+
+- **Report:** the author says Explore scrolling lag is fixed.
+- **Changes (all uncommitted at the time of this entry):**
+  1. `GameGrid.jsx` is wrapped in `memo(GameGrid)` (`GameCard` was already memoized), so
+     state-only re-renders (loading labels, search text) skip re-reconciling the grid.
+  2. `gameService.js` adds `optimizedImageUrl()` and rewrites each RAWG image from
+     `/media/...` to `/media/crop/600/400/...`, so the browser decodes/paints much smaller
+     bitmaps on the long grid.
+  3. `ExplorePage.jsx` raises the sentinel observer's `rootMargin` from `300px` to `500px`,
+     starting the next page fetch earlier and smoothing the append.
+  4. `ExplorePage.jsx` also gained an unused `ScrollToTop` import — `ScrollToTop` is already
+     mounted globally, so this is a new lint error, not part of the fix.
+- **Receipts (2026-10-26, after the changes):** `npm run build` passes (55 modules);
+  `npm run lint` fails with 5 unused imports. No profiler trace, long-scroll recording, or
+  before/after frame-time measurement exists; "fixed" is the author's device impression.
+- **Docs caveat:** judge scroll feel on `npm run preview`/a real device, not dev
+  React/StrictMode. If lag returns, the remaining per-frame suspects are large `backdrop-filter`
+  surfaces, costly shadows, and uncapped full-resolution images outside Explore.
 
 ### Earlier
 
@@ -735,22 +839,33 @@ edit applied migrations.
 ## Not Built Yet
 
 - ~~Explore infinite-scroll closure~~ — **closed 2026-10-24** (render fixes, Exercise 2
-  search-reset, Exercise 3 key-strip, perf fixes, device/runtime verification). Remaining
+  search-reset, Exercise 3 key-strip, perf fixes, device/runtime verification). A later
+  scroll-lag follow-up (memo grid + image crops + earlier prefetch) is **author-reported
+  fixed 2026-10-26**, still uncommitted and without a before/after measurement. Remaining
   idea only: ExploreContext (state surviving navigation) — `<ScrollToTop>` must become
   restore-aware when it lands.
-- Explore state surviving navigation (ExploreContext, recommended Option A) — behind the
-  closure items; `<ScrollToTop>` must become restore-aware when it lands.
-- `Authorization` header on future feature calls not yet built — `getCurrentUser`,
-  `profileService`, and `libraryService` show the pattern.
+- `Authorization` header is attached two ways: manually in the older services
+  (`getCurrentUser`, `profileService`, `libraryService`, `reviewService`) and centrally in
+  `apiService` for community calls. Unifying the older services on `apiService` is optional
+  debt, not a feature gap.
 - Personal game library — **Done end to end, runtime-verified** (backend endpoints, `libraryService.js`, `/library` page, add-to-library card on the details page; round-trip 201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204 executed 2026-10-21 night).
 - Reviews — **Done end to end (Phase 6 closed 2026-10-23)**: backend runtime-verified
   (2026-10-22), front browser-verified for create/edit/duplicate-409/delete/signed-out
   prompt (2026-10-23). Optional polish ideas parked: delete the commented-out `<select>`
   + orphan `htmlFor` label in `ReviewSection.jsx`; read-only `StarRating` in review list
   items.
-- Community posts, likes, comments — **backend slice implemented but untracked and not
-  closed**: paged feed, post create/delete, comments, likes. `POST .../likes` works;
-  `DELETE .../likes` returns 401 (root cause diagnosed 2026-10-25: missing `@Transactional`
-  around the derived delete — not yet fixed). Frontend `/community` is still a stub.
+- Community posts, likes, comments — **backend committed (c28f123), frontend partial
+  (e9e1c9a)**: paged public feed, post create/delete, comments, like/unlike endpoints all
+  exist; V6 applied. `/community` shows the first 10 posts with a like button only.
+  **Owed:** runtime re-check of like DELETE after the `@Transactional` fix; composer +
+  comments UI + delete UI + pagination; fix the unload flush (relative URL, no auth) and
+  the `deleteComment` endpoint mismatch.
+- **Frontend lint cleanup:** 5 unused imports remain (build is green). Includes the
+  `ScrollToTop` import just added to `ExplorePage.jsx` during the scroll-lag experiment.
+- Frontend cleanup debt: unused `Feed` import + duplicate `ScrollToTop` mount in `App.jsx`,
+  unused `useRef`/`data` in `PostCard.jsx`, stray `ExplorePage` import in `authService.js`,
+  unused `ScrollToTop` import in `ExplorePage.jsx`;
+  `apiService` missing the `status`/`fieldErrors` convention; legacy `models/Game.java`
+  still in the backend.
 - Automated feature tests (backend and frontend).
 - Deployment configuration.

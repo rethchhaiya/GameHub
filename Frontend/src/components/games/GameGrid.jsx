@@ -1,4 +1,5 @@
 import GameCard from "./GameCard";
+import { memo } from "react";
 
 function GameGrid({ games }) {
   return (
@@ -10,4 +11,4 @@ function GameGrid({ games }) {
   );
 }
 
-export default GameGrid;
+export default memo(GameGrid);

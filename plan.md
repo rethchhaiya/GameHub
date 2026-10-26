@@ -29,7 +29,7 @@ Architecture in one line:
 
 React frontend → Spring Boot REST API → PostgreSQL database, with the Spring Boot backend also calling an external game API when game data is needed.
 
-Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users`, `profiles`, and `library_entries` tables exist), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The personal game library is complete — `library_entries` schema (V3/V4), entity/repository/DTOs/service/controller, a React `/library` page, and an add-to-library card on the game details page — and its runtime round-trip was verified by the author (2026-10-21 night). Reviews and the community/social features are not built. Details are in section 14.
+Current repository status: the project is past scaffolding. On the backend, the PostgreSQL schema is managed by Flyway (`users`, `profiles`, `library_entries`, `reviews`, `posts`, `comments`, and `likes` tables exist; live schema version 6), the RAWG game API is integrated, and registration plus login credential verification are implemented and manually tested. On the frontend, the site layout (responsive Navbar, Footer, layout route), the game discovery UI (search, game grid, game details, screenshot lightbox), and the authentication UI (login and register forms wired to the backend, a React auth context with a `useAuth` hook, and a Navbar that shows the logged-in user) are built. Register and login now issue a JWT (`{ token, user }` response) that the frontend stores in `localStorage`, and Spring Security is configured (stateless chain, global CORS bean, 401 entry point) — and the backend now reads the token: a `JwtAuthenticationFilter` validates the `Authorization` header, loads the user, and fills the `SecurityContext`, so `GET /api/hello` returns 200 with a valid token and 401 without. Protected React routes now guard `/library` and `/profile`, and the frontend attaches the token to profile calls. User profiles are complete: `profiles` table, `Profile` entity/repository, DTOs, service, controller (`GET/PUT /api/profile/me`), and a React profile page. The personal game library is complete — `library_entries` schema (V3/V4), entity/repository/DTOs/service/controller, a React `/library` page, and an add-to-library card on the game details page — and its runtime round-trip was verified by the author (2026-10-21 night). Reviews are complete end to end (Phase 6 closed 2026-10-23: `reviews` V5, backend runtime-verified, browser walkthrough passed). The community slice is partially built: the posts/comments/likes backend and V6 are committed, and `/community` renders a first-page feed with an optimistic like button; post creation, comments UI, deletion UI, and feed pagination are not built. Frontend builds cleanly (55 modules) but lint still fails on five unused imports. The author reports Explore scrolling lag fixed by uncommitted changes — `memo(GameGrid)`, RAWG 600×400 image crops in `gameService.js`, and a larger `rootMargin` — all included in the final green build. Details are in section 14.
 
 ---
 
@@ -195,10 +195,10 @@ MVP-first means building a manageable first version before expanding into a larg
 | Authentication | Register, login, logout, protected routes | Password reset, email verification, remember me |
 | Profiles | View profile, edit own profile, public view | Avatars upload, stats, activity timeline |
 | Library | Add/remove, statuses, list | Custom lists, playtime, ratings-only entries |
-| Reviews | Create, display, author/game link | Edit/delete (planned), rating breakdown, likes on reviews |
-| Posts | Create, display, like, comment | Edit/delete, media attachments, reporting, moderation |
+| Reviews | Create, display, author/game link | Edit/delete (**implemented 2026-10-23**), rating breakdown, likes on reviews |
+| Posts | Create, display, like, comment | Edit (not built), delete (**implemented**), media attachments, reporting, moderation |
 
-Edit and delete for reviews is listed in the plan as "where planned", so it is Planned rather than Essential.
+Edit and delete for reviews were listed as "where planned"; both shipped in Phase 6, so the MVP includes them.
 
 ---
 
@@ -225,10 +225,10 @@ Conceptual entities discussed for GameHub. Only the entities below were planned;
 | User profile | Profile data and gaming info | Implemented |
 | Game reference or cached game info | Optional local reference to external games | Decided 2026-10-20: no dedicated table — entries store `rawg_id` + cached display fields |
 | Personal game library entry | Links a user to a game with a status | Implemented (2026-10-21) |
-| Review | A user review of a game | Planned |
-| Community post | A user post | Planned |
-| Comment | A comment on a post | Planned |
-| Like or reaction | A user reaction to content | Planned, if implemented |
+| Review | A user review of a game | Implemented (2026-10-23) |
+| Community post | A user post | Implemented backend; feed UI partial (2026-10-26) |
+| Comment | A comment on a post | Implemented backend; no UI yet (2026-10-26) |
+| Like or reaction | A user reaction to content | Implemented backend for posts; feed like button partial (2026-10-26) |
 
 ### Likely relationships
 
@@ -254,7 +254,7 @@ This is an Open decision (section 15). The plan is to avoid creating unnecessary
 ### Proposed vs confirmed schema
 
 - Proposed schema decisions: all entities and relationships in this section are proposed based on the planning discussion.
-- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). The `library_entries` table exists (Flyway `V3__create_library_entries_table.sql` + `V4__rename_library_constraint.sql`, mapped by `LibraryEntry`) with `id`, `user_id` (FK → `users.id`, `ON DELETE CASCADE`), `rawg_id`, cached `game_name`/`game_image`, `status` (CHECK), `added_at`, and `UNIQUE (user_id, rawg_id)`; a user has many entries. Library endpoints are implemented and runtime-verified (2026-10-21 night). No review, post, comment, or like entity exists in code yet.
+- Confirmed schema decisions: the `users` table exists (Flyway `V1__create_users_table.sql`, mapped by `User`) with `id` (generated primary key), `username` (unique, required), `email` (unique, required), `password_hash` (required), `created_at` (defaults to current timestamp). The `profiles` table exists (Flyway `V2__create_profiles_table.sql`, mapped by `Profile`) with `id`, `user_id` (FK → `users.id`, `UNIQUE`, `ON DELETE CASCADE`), `bio`, `avatar_url`, `created_at`; the relationship is one-to-one. Both entities have repositories; profiles are served by `GET/PUT /api/profile/me` (verified in section 14). The `library_entries` table exists (Flyway `V3__create_library_entries_table.sql` + `V4__rename_library_constraint.sql`, mapped by `LibraryEntry`) with `id`, `user_id` (FK → `users.id`, `ON DELETE CASCADE`), `rawg_id`, cached `game_name`/`game_image`, `status` (CHECK), `added_at`, and `UNIQUE (user_id, rawg_id)`; a user has many entries. Library endpoints are implemented and runtime-verified (2026-10-21 night). The `reviews` table exists (Flyway `V5__create_reviews_table.sql`, mapped by `Review`) with `id`, `user_id` (FK → `users.id`, cascade delete), `rawg_id`, `rating` (CHECK 1–5), `content`, `created_at`, and `UNIQUE (user_id, rawg_id)`; review endpoints are implemented and runtime-verified (2026-10-22), and the browser walkthrough closed Phase 6 (2026-10-23). The `posts`, `comments`, and `likes` tables exist (Flyway `V6__create_community_tables.sql`, mapped by `Post`/`Comment`/`Like`); their backend endpoints are committed (2026-10-25) and V6 is applied to the live database. The community frontend is partial: a public first-page feed and optimistic like button exist; composer, comments UI, delete UI, and pagination do not.
 
 ---
 
@@ -463,7 +463,13 @@ Acceptance criteria:
 - A user can edit or delete their own review (where planned).
 - Reviews cannot be attributed to another user.
 
-Completion status: Not started.
+Completion status: Completed (2026-10-23).
+
+- Schema: `V5__create_reviews_table.sql` (applied 2026-10-22) — lean `rawg_id` reference (no cached game fields, because reviews render on `/game/:id`), CHECK rating 1–5, `UNIQUE (user_id, rawg_id)`.
+- Backend: `Review` entity, `ReviewRepository`, `ReviewRequest`/`ReviewUpdateRequest`/`ReviewResponse` DTOs, `ReviewService` (principal identity, duplicate guard → 409, shared `getOwnedReview` → 404 for missing/unowned), `ReviewController` (`POST/GET/PUT/DELETE /api/review…`), `ReviewAlreadyExistsException`.
+- Frontend: `reviewService.js`, `ReviewSection.jsx` (load/list/create/edit/delete, 409/400 handling, author-only actions, star rating input), wired into `/game/:id`.
+- Verified: backend round-trip against Neon (201 → duplicate 409 → GET → PUT 200 → DELETE 204 → validation 400 → no-token 401, 2026-10-22); browser walkthrough create/edit/duplicate/delete/signed-out prompt (2026-10-23); compile + lint + build passing at closure.
+- Two bugs found and fixed during the phase: a missing `@ExceptionHandler` annotation made duplicate reviews surface as 401 instead of 409; `PUT` validated the full `ReviewRequest` (`rawgId` required) while the UI sent only `{rating, content}` → new `ReviewUpdateRequest` DTO.
 
 ### Phase 7 — Community posts
 
@@ -486,7 +492,13 @@ Acceptance criteria:
 - Comment on posts.
 - Posts and comments show their authors.
 
-Completion status: Not started.
+Completion status: Partial — backend committed, frontend feed/like only (2026-10-26).
+
+- Schema: `V6__create_community_tables.sql` (committed c28f123, applied to the live DB 2026-10-25) — `posts`, `comments`, `likes` with user/post FKs, `UNIQUE (post_id, user_id)` on likes, and feed/comments/likes indexes.
+- Backend: `Post`/`Comment`/`Like` entities, repositories, DTOs, `PostService`/`CommentService`/`LikeService`, `PostController`/`CommentController`/`CommentDeleteController`/`LikeController`, and 403 exceptions for unauthorized post/comment deletes. Public `GET /api/posts/**` so signed-out visitors can read the feed.
+- Frontend: `apiService.js` (central fetch + Bearer + 204 handling), `communityService.js`, `Feed.jsx` (first page only, module-level cache surviving navigation), `PostCard.jsx` (optimistic like with 800 ms debounce and per-post caches), `CommunityPage` renders the feed.
+- Verified: like `POST` works (2026-10-25); backend compile and frontend build pass (2026-10-26, 55 modules, including the uncommitted image-crop/rootMargin changes). Likes `DELETE` was recorded as 401 on 2026-10-25; the fix (`@Transactional` on `unlikePost`) is present in committed source but has not been runtime re-checked.
+- Still open: post composer, comments UI, delete UI, feed pagination, empty state, a working unload flush (the current flush uses a relative URL and no auth header), the mismatched `deleteComment` service URL, and four unused-import lint errors.
 
 ### Phase 8 — Testing and deployment
 
@@ -535,10 +547,10 @@ The backend owns GameHub data and proxies external game data. Rows marked Curren
 | Public profile | GET | /api/users/{id} | PostgreSQL | Planned |
 | Library | GET/POST | /api/library | PostgreSQL | Current — implemented and runtime-verified; `/library` page + add-to-library card built |
 | Library entry | PUT/DELETE | /api/library/{id} | PostgreSQL | Current — status update / delete, principal-scoped; runtime-verified |
-| Reviews | GET/POST/PUT/DELETE | /api/reviews | PostgreSQL | Planned |
-| Posts | GET/POST | /api/posts | PostgreSQL | Planned |
-| Comments | GET/POST | /api/posts/{id}/comments | PostgreSQL | Planned |
-| Likes | POST/DELETE | /api/posts/{id}/like | PostgreSQL | Planned |
+| Reviews | GET/POST/PUT/DELETE | /api/review, /api/review/{id} | PostgreSQL | Current — full round-trip verified (2026-10-22/23) |
+| Posts | GET/POST/DELETE | /api/posts, /api/posts/{id} | PostgreSQL | Current — GET is public and paged; POST/DELETE require a token; committed 2026-10-25 |
+| Comments | GET/POST/DELETE | /api/posts/{postId}/comments, /api/comments/{id} | PostgreSQL | Current backend — GET is public; delete uses the separate `/api/comments/{id}` path; no UI yet |
+| Likes | POST/DELETE | /api/posts/{postId}/likes | PostgreSQL | Current backend — POST works; DELETE source-fixed with runtime re-check pending; feed like button exists |
 
 ### Discovery flow (external data)
 
@@ -598,9 +610,9 @@ Planned approach:
 
 Current evidence:
 
-- Backend: registration and login were manually tested (correct credentials, wrong password 401, unknown email 401, duplicate email 409, validation 400). Profile `PUT` (create) and `GET` were manually verified, and the CORS preflight was checked with curl (2026-10-19). The library endpoints compile but have not been exercised against the live database yet. Only a context-load test (BackendApplicationTests, contextLoads) exists as automation.
-- Frontend: no test setup configured in package.json; features have been verified manually in the browser.
-- Frontend CI checks in use: `npm run lint` (ESLint) and `npm run build` (Vite) both pass.
+- Backend: registration and login were manually tested (correct credentials, wrong password 401, unknown email 401, duplicate email 409, validation 400). Profile `PUT` (create) and `GET` were manually verified, and the CORS preflight was checked with curl (2026-10-19). Library (201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204, 2026-10-21) and reviews (201 → 409 → GET → PUT → DELETE → validation 400 → 401, 2026-10-22) were round-tripped against Neon. Community: like POST works, like DELETE was 401 before the transactional fix and still needs a post-fix runtime check; posts/comments have no recorded runtime receipts. `flyway:info` on 2026-10-26 reports schema version 6 with V1–V6 all applied. Only a context-load test (BackendApplicationTests, contextLoads) exists as automation.
+- Frontend: no test setup configured in package.json; features have been verified manually in the browser (auth, profiles, library, reviews, Explore). The community feed/like browser walkthrough is not recorded.
+- Frontend checks in use (2026-10-26 re-runs): `npm run build` **passes** at 55 modules, including the uncommitted scroll-lag changes (`memo(GameGrid)`, image crops, Explore `rootMargin`). `npm run lint` still **fails** with five `no-unused-vars` errors (`App.jsx` `Feed`, `PostCard.jsx` `useRef` + `data`, `ExplorePage.jsx` `ScrollToTop`, `authService.js` `ExplorePage`).
 
 This is Open: a testing tool for the frontend still needs to be chosen, and backend feature tests have not been automated.
 
@@ -652,9 +664,17 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | HomePage (`/home`) — hero, CTA, feature cards | Completed | pages/HomePage.jsx |
 | ExplorePage (`/explore`) — search, grid, loading/error/empty states | Completed | pages/ExplorePage.jsx |
 | GameDetailsPage (`/game/:id`) — details + screenshot lightbox | Completed | pages/GameDetailsPage.jsx |
-| GameCard component | Completed | components/GameCard.jsx |
-| API service layer (list, search, detail, screenshots) | Completed | services/gameService.js |
-| Auth service layer (`registerUser`, `loginUser`, `getCurrentUser`) | Completed | services/authService.js (`getCurrentUser` calls `/api/users/me` with the stored token) |
+| GameCard component | Completed | components/games/GameCard.jsx (`memo`-wrapped; hover/perf fixes) |
+| GameGrid component | Completed (memo wrapper uncommitted) | components/games/GameGrid.jsx — responsive 1/2/3/4-column grid used by Explore; `memo(GameGrid)` is part of the author's scroll-lag fix |
+| Explore infinite scroll + ScrollToTop | Completed; scroll-lag fix author-reported (2026-10-26) | pages/ExplorePage.jsx (pagination, sentinel observer, `loadMode`, search reset; uncommitted `rootMargin` 300 → 500; unused `ScrollToTop` import added and not rendered), components/ScrollToTop.jsx (mounted twice — App and AppRoute) |
+| API service layer (list, search, detail, screenshots) | Completed; uncommitted optimization | services/gameService.js (`fetchGames(page)`); working-tree change adds `optimizedImageUrl` (`/media/` → `/media/crop/600/400/`) as part of the scroll-lag fix, maps results, and drops the old commented cache block. File parses and builds |
+| Auth service layer (`registerUser`, `loginUser`, `getCurrentUser`, `isLoggedIn`) | Completed (lint error) | services/authService.js (`getCurrentUser` calls `/api/users/me` with the stored token; stray unused `ExplorePage` import breaks lint) |
+| Review service layer (`getReviewByGame`, `createReview`, `updateReview`, `deleteReview`) | Completed | services/reviewService.js — attaches `Authorization`, handles 204, normalizes errors |
+| Review UI on the game page | Completed | components/reviews/ReviewSection.jsx — load/list/create/edit/delete, author-only actions, 409/400 handling, `StarRating` |
+| Community API service | Completed | services/communityService.js — feed/post/comment/like functions; unused `deleteComment` uses the wrong path |
+| Central API client | Completed | services/apiService.js — base URL + Bearer + 204 handling; does not attach `status`/`fieldErrors` |
+| Community feed | Partial | components/Feed.jsx — first page only, module cache surviving navigation, no empty state/pagination |
+| Community post card | Partial | components/PostCard.jsx — optimistic like with debounce + module caches; broken unload flush, no error rollback |
 | Profile service layer (`getProfile`, `updateProfile`) | Completed | services/profileService.js — attaches `Authorization`, treats 404 as "no profile yet" |
 | Library service layer (`getLibrary`, `addToLibrary`, `updateStatus`, `deleteFromLibrary`) | Completed | services/libraryService.js — attaches `Authorization`, handles `204`, normalizes errors |
 | Library status options | Completed | constants/libraryStatuses.js — shared by the library page and the details-page add card |
@@ -666,11 +686,12 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | ProfilePage (`/profile`) — view/edit own profile | Completed | pages/ProfilePage.jsx (loads via `getProfile`, saves via `updateProfile`, live avatar preview, error/success banners) |
 | MyLibraryPage (`/library`) — list, status update, delete | Completed | pages/MyLibraryPage.jsx (loading/error/empty states, status `<select>` → PUT, inline delete confirmation, busy guard) |
 | Add to library on the details page | Completed | pages/GameDetailsPage.jsx — status select + "Add to library", 409 / signed-out handling |
-| CommunityPage | Placeholder only | pages/CommunityPage.jsx (empty stub) |
+| CommunityPage | Partial | pages/CommunityPage.jsx renders `<Feed/>`; public route; no composer/comments/delete UI |
 | Protected route guard (`PrivateRoute`) | Completed | routes/PrivateRoute.jsx — `loading` → placeholder, no `user` → `<Navigate to="/login" replace />`, else `<Outlet/>`; wired to `/library` and `/profile` in routes/index.jsx (2026-10-19) |
 | Routing | Completed | `/` redirects to `/home`; `/home`, `/explore`, `/library` (protected), `/profile` (protected), `/community`, `/game/:id`, `/login`, `/register` |
-| Frontend calls backend | Completed | fetch calls in gameService.js |
-| Lint / build | Passing | `npm run lint`, `npm run build` |
+| Frontend calls backend | Completed | game/profile/library/review services + centralized `apiService.js` for community |
+| Build | Passing | `npm run build` — 55 modules (2026-10-26, with the uncommitted scroll-lag changes) |
+| Lint | **Failing (5 errors)** | `npm run lint` — unused `Feed` (App.jsx), `useRef` + `data` (PostCard.jsx), `ScrollToTop` (ExplorePage.jsx), `ExplorePage` (authService.js) (2026-10-26) |
 
 ### Backend
 
@@ -679,18 +700,23 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | Scaffold (Spring Boot 4.1.1, Java 21) | Current | pom.xml |
 | dotenv loading of .env | Current | BackendApplication.java |
 | PostgreSQL config (Neon, env vars, ddl-auto=none) | Completed | application.properties, .env |
-| Flyway migrations | Completed | V1__create_users_table.sql, V2__create_profiles_table.sql, V3__create_library_entries_table.sql, V4__rename_library_constraint.sql |
+| Flyway migrations | Completed | V1–V6 (`users`, `profiles`, `library_entries`, library constraint rename, `reviews`, community tables); live DB at schema version 6 (verified 2026-10-26) |
 | `users` table | Completed | Flyway V1 |
 | `profiles` table | Completed | Flyway V2 — `user_id` FK → `users(id)`, `UNIQUE`, `ON DELETE CASCADE` (2026-10-19) |
 | `library_entries` table | Completed | Flyway V3 — `user_id` FK, `rawg_id`, cached `game_name`/`game_image`, status CHECK, `UNIQUE (user_id, rawg_id)`; V4 renamed the constraint (2026-10-20) |
 | Library entity/repository/DTOs/service | Completed | entity/LibraryEntry.java, repository/LibraryEntryRepository.java, dto/LibraryRequest.java, dto/LibraryResponse.java, dto/StatusUpdateRequest.java, services/LibraryService.java |
 | `LibraryController` | Completed, runtime-verified | controllers/LibraryController.java — `GET`/`POST /api/library`, `PUT`/`DELETE /api/library/{id}` (2026-10-21) |
+| `reviews` table | Completed, runtime-verified | Flyway V5 — lean `rawg_id`, rating CHECK 1–5, `UNIQUE (user_id, rawg_id)`; applied 2026-10-22 |
+| Review entity/repository/DTOs/service/controller | Completed, runtime-verified | entity/Review.java, repository/ReviewRepository.java, dto/ReviewRequest.java + ReviewUpdateRequest.java + ReviewResponse.java, services/ReviewService.java, controllers/ReviewController.java, exception/ReviewAlreadyExistsException.java (2026-10-22) |
+| `posts` / `comments` / `likes` tables | Completed | Flyway V6 — applied 2026-10-25 (committed c28f123) |
+| Community entities/repositories/DTOs/services/controllers | Completed backend, partially verified | Post/Comment/Like entities + repositories + DTOs; PostService/CommentService/LikeService; Post/Comment/CommentDelete/Like controllers; 403 exceptions. Like POST verified; posts/comments and like DELETE lack post-fix runtime receipts |
+| Public feed access | Completed | `SecurityConfig` permits `GET /api/posts/**`; `PostService.toResponse` null-guards the principal (e9e1c9a) |
 | `User` entity + `UserRepository` | Completed | entity/, repository/ |
 | `Profile` entity + `ProfileRepository` | Completed | entity/Profile.java (`@OneToOne` + `@JoinColumn(name = "user_id")`), repository/ProfileRepository.java (`findByUserId`) (2026-10-19) |
 | Registration (`POST /api/auth/register`) | Completed, tested | controllers/AuthController.java, services/UserService.java, dto/RegisterRequest.java |
 | Login credential verification (`POST /api/auth/login`) | Completed, tested | controllers/AuthController.java, dto/LoginRequest.java |
 | BCrypt password hashing | Completed | config/PasswordConfig.java |
-| Validation + exception handling (400/401/409) | Completed | dto annotations, controllers/GlobalExceptionHandler.java, exception/InvalidCredentialsException.java, exception/EmailAlreadyExistsException.java |
+| Validation + exception handling (400/401/403/404/409) | Completed | dto annotations, controllers/GlobalExceptionHandler.java, exception/InvalidCredentialsException.java, EmailAlreadyExistsException.java, UnauthorizedPostDeletionException.java, UnauthorizedCommentDeletionException.java |
 | CORS for the Vite dev origin | Completed | `CorsConfigurationSource` bean in `config/SecurityConfig.java` (origin 5173, `/api/**`), wired explicitly with `.cors(cors -> cors.configurationSource(...))`; legacy `@CrossOrigin` remains on some controllers |
 | External game API (RAWG) integration | Completed | game endpoints used by the frontend |
 | JWT — sign/verify (`JwtService`) + config | Completed | services/JwtService.java, application.properties (`jwt.secret`, `jwt.expiration-ms`) |
@@ -700,9 +726,9 @@ Verified by inspecting the repository and manual testing. The project is past sc
 | Profile DTOs (`ProfileRequest`, `ProfileResponse`) | Completed | `dto/ProfileRequest.java` (input: `bio`, `avatarUrl`), `dto/ProfileResponse.java` (output: `id`, `userId`, `bio`, `avatarUrl`, `createdAt`) |
 | `ProfileService` | Completed | `services/ProfileService.java` — `getProfileUserById`, `saveProfile` create-or-update with `@Transactional` |
 | `ProfileController` | Completed, tested | `controllers/ProfileController.java` — `GET`/`PUT /api/profile/me`, reads the principal (2026-10-19) |
-| Protected endpoints | Completed | `GET /api/hello`, `GET /api/users/me`, `GET/PUT /api/profile/me`, and all `/api/library` endpoints accept a valid token (200) and reject without one (401) |
+| Protected endpoints | Completed | `GET /api/hello`, `GET /api/users/me`, `GET/PUT /api/profile/me`, all `/api/library`, all `/api/review`, and community write endpoints accept a valid token (200) and reject without one (401); public exceptions are games, auth, and `GET /api/posts/**` |
 | Automated feature tests | Not started | only contextLoads |
-| `mvnw.cmd clean compile` | Passing | verified by author |
+| `mvnw.cmd clean compile` | Passing | re-run 2026-10-26 |
 
 Observed notes:
 
@@ -712,6 +738,11 @@ Observed notes:
 - `RegisterResponse` getter names determine the JSON keys Jackson emits, but only when they follow the JavaBean convention: `getId()` → `id`, `getUserName()` → `userName` (capital N), `getEmail()` → `email`. The old `getid()` was silently ignored by Jackson 3 — `id` was missing from `/me`, register, and login JSON until it was renamed (2026-10-18). The frontend Navbar therefore reads `user.userName`. The entity uses the conventional `getUsername()`; aligning the DTO getter (or adding `@JsonProperty("username")`) would make the key `username`.
 - The exception classes' package folder used to be misspelled `execption/`; renamed to `exception/` on 2026-10-20 (folder + package statements + imports moved together after a half-applied rename broke the compile — the lesson: a package rename is atomic). `PasswordConfig.java` sits in the root package rather than a `config/` package. Cosmetic, not refactored.
 - The .env file was committed to git and then untracked (commit caea6b0). Secrets remain in history; rotating them may be advisable. This is Open.
+- The backend also has an unused `models/Game.java` POJO left from before the RAWG proxy returned `JsonNode` directly. It is dead code, not a second game model.
+- Community frontend has two fetch conventions: the older services (`authService`, `gameService`, `profileService`, `libraryService`, `reviewService`) each attach headers and normalize `status`/`fieldErrors` themselves; community uses `apiService`, which only throws `Error(message)`. `PostCard` imports `useRef` and `data` without using them, and `App.jsx` imports `Feed` without using it — all four lint errors (2026-10-26).
+- The author reports the Explore scrolling lag fixed (2026-10-26) with three uncommitted changes included in the current green build: `memo(GameGrid)`, `gameService.js` rewriting RAWG image URLs from `/media/` to `/media/crop/600/400/`, and `ExplorePage.jsx` raising the infinite-scroll `rootMargin` from 300px to 500px. No profiler/before-after measurement is recorded — this is a device impression. The same edit left an unused `ScrollToTop` import in `ExplorePage.jsx`; `ScrollToTop` is already mounted globally.
+- `PostCard`'s unload flush is not functional as written: it fetches a relative `/posts/{id}/likes` (no API base) and sends no `Authorization` header. `communityService.deleteComment` also targets the wrong path (`DELETE /posts/{postId}/comments` instead of `DELETE /api/comments/{id}`). Both are currently unused paths or fallbacks, but they are real defects.
+- `ScrollToTop` is mounted both in `App.jsx` and in `AppRoute` (routes/index.jsx). Harmless duplicate effect, but one mount should be removed when the frontend cleanup pass happens.
 
 ---
 
@@ -723,8 +754,10 @@ Open decisions:
 - Auth architecture: Spring Security + JWT implemented and verified — stateless filter chain, `JwtService` (HS256), token issuance and request validation, explicit CORS wiring, 401 entry point, protected routes. Still open: refresh-token strategy (single 24h access token is the current choice).
 - Game references: decided (2026-10-20) — **Option A**: store the external RAWG id plus cached display fields (`game_name`, `game_image`) on each library entry; no local `games` table. Details re-fetch from RAWG when needed. Reviews (Phase 6) will reuse the same pattern unless they outgrow it.
 - Profile model: decided (2026-10-19) — separate `profiles` table (one-to-one with `users`) and a `Profile` entity. Implemented.
-- Reviews: whether edit/delete is in the MVP or right after. Still open.
-- Likes/reactions: which content types can be liked. Still open.
+- Reviews: resolved — edit/delete are in the MVP and implemented (2026-10-23), including the separate `ReviewUpdateRequest` contract.
+- Likes/reactions: resolved for now — likes apply to posts only; no review/comment likes exist. Revisit if reactions expand to other content types.
+- Community UI scope: the backend supports posts, comments, likes, and deletes, but the frontend only ships a read-only first-page feed plus a like button. Whether the MVP requires a composer/comments UI (and how many posts to page) is still open.
+- Community like sync: the current design (optimistic toggle + 800 ms debounce + module caches + unload flush) is a deliberate experiment; the unload flush is currently broken (relative URL, no auth), and cross-account cache invalidation on logout is not handled. Decide whether to repair or simplify to a plain request per click before calling the feature done.
 - Frontend testing tool: choose one. Still open.
 - lucide-react: officially adopted or incidental. Still open (installed but unused).
 - Deployment targets for frontend, backend, and PostgreSQL. Still open.
@@ -759,9 +792,12 @@ These are ideas only. They must not block MVP completion.
 
 ## 17. Immediate Next Steps
 
-1. Phase 4 is complete (2026-10-19): profiles work end to end (backend + React page), protected routes guard `/library` and `/profile`, and `profileService` shows the pattern for attaching `Authorization` — reuse it for library/review calls.
-2. Phase 5 (personal game library) is complete (2026-10-21): `library_entries` schema (V3/V4), backend endpoints, `/library` page, and the add-to-library card on the details page; the runtime round-trip (201 → duplicate 409 → GET 200 → PUT 200 → DELETE 204) was verified by the author. Next: Phase 6 (reviews), reusing the RAWG-id + cached-display-fields game-reference pattern.
-3. Keep .env untracked and consider rotating any secrets already committed.
+1. Fix the five unused-import lint errors (including the new `ScrollToTop` import in `ExplorePage.jsx`) and decide whether `ScrollToTop` stays in `App.jsx` or `AppRoute` — the build is already green; lint is the only red check. Commit the scroll-lag changes (`memo(GameGrid)`, image crops, `rootMargin`) once satisfied.
+2. Re-run the community runtime checks on a fresh boot: like POST → 200, like DELETE → 204 (confirming the `@Transactional` fix), feed GET signed out, post/comment create/delete authorization (author vs other user vs signed out).
+3. Decide the community MVP surface: add post composer, comments UI, delete UI, and feed pagination — or explicitly defer them. Also repair or replace the unload-flush/debounce like design, and fix `communityService.deleteComment` to `DELETE /api/comments/{id}`.
+4. Add automated tests (backend + frontend) — still the largest gap. Choose a frontend testing tool, then cover auth, library, reviews, and community happy/error paths.
+5. Keep .env untracked and consider rotating any secrets already committed.
+6. Deployment remains the final phase (frontend, backend, PostgreSQL) after the MVP features and tests settle.
 
 ---
 
@@ -799,6 +835,11 @@ These are ideas only. They must not block MVP completion.
 | 28 | Wire the CORS bean explicitly with `.cors(cors -> cors.configurationSource(...))` | `Customizer.withDefaults()` silently failed to apply the bean; explicit wiring guarantees the filter uses it | Implemented (2026-10-19) |
 | 29 | Keep profile endpoints authenticated and read the user from the SecurityContext | The token already identifies the user; the client should not supply a user id | Implemented (2026-10-19) |
 | 30 | Reference games by external RAWG id + cached display fields (`rawg_id`, `game_name`, `game_image`); no local `games` table | The library grid only needs name + image, which RAWG already serves; avoids an extra entity/repo/service layer for proxied data | Implemented in V3 (2026-10-20) |
+| 31 | Reviews store only `rawg_id` (no cached game fields) | Reviews render on `/game/:id`, where RAWG data is already loaded; a "reviews by user" page can add cached fields later via a forward migration | Implemented in V5 (2026-10-22) |
+| 32 | Use a separate `ReviewUpdateRequest` (`rating` + `content`) on PUT | The URL id + principal identify the row; accepting `rawgId` on edit would let a review re-point at another game and bypass the duplicate guard | Implemented (2026-10-23) |
+| 33 | Keep the community feed and comments readable signed out (`GET /api/posts/**` public) | Discovery/social content should be visible before login; writes still require a token, and `likedByCurrentUser` null-guards the principal | Implemented (2026-10-26, e9e1c9a) |
+| 34 | Use optimistic likes with a per-post debounce queue and module-level caches | Makes rapid like/unlike feel instant and survives navigation/unmount; the trade-off is stale cross-account state and a complex flush path that is currently broken | Partial — experimental (2026-10-26) |
+| 35 | Centralize community HTTP in `apiService` | Avoids repeating base URL/header/204 logic for eight endpoints; older services keep their own error normalization for now | Implemented (2026-10-26) |
 
 This table is the reference for future sessions. Do not change decision 8 (Option C) or the MVP-first strategy without an explicit new decision.
 
@@ -886,4 +927,15 @@ Objective: become capable of designing, implementing, debugging, and explaining 
 | 2026-10-19 | Spring — bean discovery vs explicit wiring | `.cors(Customizer.withDefaults())` relied on discovering the bean and silently skipped it; `.cors(cors -> cors.configurationSource(bean))` is explicit | Explicit is predictable — the same idea as passing a function instead of hoping something is found. |
 | 2026-10-19 | React — prop names are the contract | `handleSubmit={...}` is just an unknown prop on `<form>`; only `onSubmit` wires the handler | A wrong prop name fails silently and the native submit reloads the page, wiping state. |
 | 2026-10-19 | React — `setState` in effects | React 19 lint rejects synchronous `setState` in an effect body; initialize state from `localStorage` instead and update in promise callbacks | Avoids cascading renders; effects should sync with external systems, not derive initial state. |
+| 2026-10-22 | Reviews — validation placement | Validate by what a field is, at the boundary where it enters: DTO annotations for ranges, service whitelist for arbitrary sets, DB CHECK as a backstop | A bad value that reaches a DB CHECK surfaces as a 500, not a clean 400. |
+| 2026-10-22 | Reviews — @ExceptionHandler must be annotated | A correct handler method with no annotation is dead code; the exception escapes to the security error dispatch and comes back as 401 | Same mechanism as the later like-DELETE 401: infra failures can masquerade as auth failures. |
+| 2026-10-22 | DTOs — create vs update | Create includes the identity being established (`rawgId`); update includes only mutable fields (`rating`, `content`) because the URL + principal identify the row | Prevents an edit from re-pointing a review and bypassing the duplicate guard. |
+| 2026-10-23 | React — component extraction (`StarRating`) | Self-contained sub-component with local hover state; `type="button"` is required inside a form | A bare `<button>` defaults to `type="submit"` and would submit the review form. |
+| 2026-10-24 | Explore — scroll performance | `backdrop-filter` recomposites every scroll frame; large blurred box-shadows are paint-expensive under a stationary cursor; `memo` limits reconcile work to appended cards | Judge scroll feel on `npm run preview`/device, not dev — StrictMode double-invokes and dev React is unminified. |
+| 2026-10-24 | Jackson 3 — node types | `TextNode` no longer exists in `tools.jackson.databind.node`; text checks use `StringNode` | Compile error is the receipt; guard with `instanceof` before casting. |
+| 2026-10-25 | Spring Data — derived deletes need a transaction | `deleteByUserAndPost` runs `EntityManager.remove` and needs `@Transactional`; inherited `save`/`deleteById` are already transactional | Without it, `TransactionRequiredException` escapes to the security error dispatch and returns 401. |
+| 2026-10-26 | React — module-level caches | `globalFeedCache` / `globalLikeState` / debounce maps live outside component state, so they survive unmount and navigation | They are shared across users and never invalidated on logout — cache scope must match identity scope. |
+| 2026-10-26 | React — optimistic UI | Update state first, fire the request later (debounced), and reconcile with the server response | Without a rollback path, a failed request leaves the UI claiming a like that was never saved. |
+| 2026-10-26 | HTTP — base URL + auth on every call | The unload flush bypassed both `VITE_API_BASE_URL` and the `Authorization` header, so a relative `/posts/...` request went to the Vite origin unauthenticated | Centralizing in `apiService` prevents this class of bug; hand-rolled fetch calls must still include both. |
+| 2026-10-26 | Explore — scroll-lag diagnosis + fix | Scrolling cost came from large full-resolution RAWG images (decode/paint) plus grid reconciliation and late prefetch. Fix: `memo(GameGrid)`, rewrite image URLs to `/media/crop/600/400/`, `rootMargin` 300 → 500 | Start the next fetch earlier and paint smaller bitmaps; `memo` only helps state-only re-renders — appending a new `games` array still re-renders the grid. Verify on `preview`/device, not dev React. |
 
