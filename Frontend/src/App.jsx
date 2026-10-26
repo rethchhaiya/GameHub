@@ -2,6 +2,7 @@
 import { BrowserRouter } from 'react-router-dom'
 import AppRoute from './routes'
 import ScrollToTop from './components/ScrollToTop';
+import Feed from './components/Feed';
 
 
 function App() {

@@ -1,8 +1,9 @@
+import Feed from "../components/Feed"
+
 function CommunityPage() {
   return (
     <div>
-      <h1>This is community page</h1>
-
+      <Feed/>
     </div>
   )
 }

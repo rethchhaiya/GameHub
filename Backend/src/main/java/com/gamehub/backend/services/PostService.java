@@ -62,7 +62,7 @@ public class PostService {
 
         long commentCount = commentRepository.countByPost(post);
         long likeCount = likeRepository.countByPost(post);
-        boolean likedByCurrentUser = likeRepository.existsByUserAndPost(currentUser, post);
+        boolean likedByCurrentUser =(currentUser != null && likeRepository.existsByUserAndPost(currentUser, post));
 
         response.setId(post.getId());
         response.setUserId(post.getUser().getId());
