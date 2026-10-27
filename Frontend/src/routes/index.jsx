@@ -10,6 +10,7 @@ import MainLayout from "../components/layouts/MainLayout";
 import PrivateRoute from "./PrivateRoute";
 import ProfilePage from "../pages/ProfilePage";
 import ScrollToTop from "../components/ScrollToTop";
+import ProfilePictureUpload from "../components/ProfilePictureUpload";
 
 function AppRoute() {
   return (
@@ -25,6 +26,7 @@ function AppRoute() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/game/:id" element={<GameDetailsPage />} />
+          <Route path="/test" element={<ProfilePictureUpload/>}/>
 
           {/* Protect route */}
           <Route element={<PrivateRoute />}>
