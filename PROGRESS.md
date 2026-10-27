@@ -3,11 +3,12 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-26 (Community slice audit + Explore scroll-lag fix: posts/comments/likes
-backend committed and V6 applied; `/community` renders a first-page feed with optimistic likes;
-the like-delete transaction fix is present in source; the author reports Explore scrolling lag
-fixed via `memo(GameGrid)`, RAWG 600×400 image crops, and a 500px `rootMargin`; build is green
-(55 modules) but lint fails on five unused imports; runtime re-check of unlike is still owed)
+Last updated: 2026-10-27 (Global shell UI refresh + community UI redesign + comments UI:
+Tailwind v4 design tokens + Space Grotesk/Inter; Navbar, Footer, MainLayout, and HomePage rebuilt;
+`/community` has a header, sticky side rail (rules/quick links), signed-in post composer, redesigned
+post cards with relative timestamps and liked/error states, feed skeleton/empty/error states, and
+an expandable comments panel with view/add/delete. Lint passes (0 errors) and `npm run build` is
+green at 60 modules. Browser visual + community runtime walkthrough still pending)
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -33,26 +34,26 @@ Root: `Frontend/`
 
 | File | What it does | Status |
 | --- | --- | --- |
-| `src/App.jsx` | Renders `BrowserRouter` + `AppRoute`; **also mounts `ScrollToTop` and imports `Feed` without using it** — the import is one of 4 current lint errors, and `ScrollToTop` is mounted here *and* in `AppRoute` (duplicate effect) | Done — cleanup owed (2026-10-26) |
+| `src/App.jsx` | Renders `BrowserRouter` + `AppRoute` only. 2026-10-27 cleanup: removed the unused `Feed` import and the duplicate `ScrollToTop` mount (`AppRoute` owns it) | Done (2026-10-27) |
 | `src/main.jsx` | Mounts the app; wraps `<App/>` in `<AuthProvider>` | Done |
 | `src/routes/index.jsx` | Route table nested under a layout route; `/library` and `/profile` wrapped in `PrivateRoute` | Done |
-| `src/components/ScrollToTop.jsx` | Reads `useLocation().pathname`, `window.scroll({top:0})`-`instant` in a `[pathname]` effect, renders `null`; bugs fixed during review: `pathName` → `pathname` casing (effect never fired before) | Done — mounted above `<Routes>` in `AppRoute` (routes/index.jsx) **and again in `App.jsx`** (duplicate mount found 2026-10-26; harmless but redundant) |
-| `src/components/layouts/MainLayout.jsx` | Navbar + `<Outlet/>` + Footer; flex column pins footer | Done |
-| `src/components/layouts/Navbar.jsx` | Brand, nav links (active highlight), responsive hamburger menu, auth links, Profile link when logged in | Done |
-| `src/components/layouts/Footer.jsx` | Copyright + RAWG attribution, responsive | Done |
+| `src/components/ScrollToTop.jsx` | Reads `useLocation().pathname`, `window.scroll({top:0})`-`instant` in a `[pathname]` effect, renders `null`; bugs fixed during review: `pathName` → `pathname` casing (effect never fired before) | Done — mounted exactly once, above `<Routes>` in `AppRoute` (routes/index.jsx); the duplicate `App.jsx` mount was removed 2026-10-27 |
+| `src/components/layouts/MainLayout.jsx` | Navbar + `<Outlet/>` + Footer; flex column pins footer; applies the `ink`/`mist` design-token surface | Done — token pass 2026-10-27 |
+| `src/components/layouts/Navbar.jsx` | Redesigned 2026-10-27: 64px sticky bar on the `ink-950` token, brand mark, active-link underline (`aria-current`), user avatar chip, Profile/Logout actions, accessible mobile menu (`aria-expanded`/`aria-controls`, SVG toggle, closes on navigate), fixed the invisible Login hover | Done (2026-10-27) |
+| `src/components/layouts/Footer.jsx` | Redesigned 2026-10-27: brand + tagline, Browse/Account link columns, bottom copyright + RAWG attribution row, responsive | Done (2026-10-27) |
 
 ### Pages
 
 | File | Route | What it does | Status |
 | --- | --- | --- | --- |
-| `src/pages/HomePage.jsx` | `/home` | Hero, CTA to Explore, three feature cards | Done |
-| `src/pages/ExplorePage.jsx` | `/explore` | Game grid with **pagination + IntersectionObserver infinite scroll**: `[page]` effect appends page results (dedupe by `id`), `hasMore` from `data.next`, sentinel `div` + observer (`rootMargin: 500px` in the uncommitted working copy; HEAD has `300px` — part of the scroll-lag fix); `loadMore` guarded by `busyRef` — flipped **synchronously in the callback** (double-fire race closed), re-normalized by the ref-sync effect; `handleSearch` (by name replaces results + `hasMore=false`; empty term resets page 1); `loadMode` (`"initial"`/`"append"`/`null`) gates both loader lines while the grid stays mounted — **scroll-jump fixed**; observer cleanup fixed to `observer.disconnect()`. **Also imports `ScrollToTop` but never renders it (unused → lint error); `ScrollToTop` is already mounted globally, so this import should be removed** | Done — scroll-lag fix author-reported 2026-10-26; earlier smooth-scroll verification 2026-10-24 |
+| `src/pages/HomePage.jsx` | `/home` | Redesigned 2026-10-27: hero with ambient lime glow + decorative library-preview panel, dual CTAs, trust highlights, three feature cards that link to the real `/explore`, `/library`, `/community` routes (stale "Coming soon" badges removed), and a closing create-account CTA band | Done (2026-10-27) |
+| `src/pages/ExplorePage.jsx` | `/explore` | Game grid with **pagination + IntersectionObserver infinite scroll**: `[page]` effect appends page results (dedupe by `id`), `hasMore` from `data.next`, sentinel `div` + observer (`rootMargin: 500px` in the uncommitted working copy; HEAD has `300px` — part of the scroll-lag fix); `loadMore` guarded by `busyRef` — flipped **synchronously in the callback** (double-fire race closed), re-normalized by the ref-sync effect; `handleSearch` (by name replaces results + `hasMore=false`; empty term resets page 1); `loadMode` (`"initial"`/`"append"`/`null`) gates both loader lines while the grid stays mounted — **scroll-jump fixed**; observer cleanup fixed to `observer.disconnect()`. (The stray `ScrollToTop` import from the scroll-lag fix was removed 2026-10-27.) | Done — scroll-lag fix author-reported 2026-10-26; earlier smooth-scroll verification 2026-10-24 |
 | `src/pages/GameDetailsPage.jsx` | `/game/:id` | Redesigned hero + two-column layout; details, genres/devs/publishers/platforms; screenshot gallery + lightbox (arrows, Esc, click-out); "Your library" card (status select → `addToLibrary`, 409 + signed-out states) | Done |
 | `src/pages/LoginPage.jsx` | `/login` | Login form → `loginUser` → destructure `{token, user}` → `login(user, token)` → `navigate('/home')`; error display | Done |
 | `src/pages/RegisterPage.jsx` | `/register` | Register form + confirm-password check → `registerUser` → `login(user, token)` → `navigate('/home')` | Done |
 | `src/pages/ProfilePage.jsx` | `/profile` | Protected; loads the current profile (404 → empty form), edits `bio`/`avatarUrl`, live avatar preview, saves via `updateProfile`, error/success banners | Done |
 | `src/pages/MyLibraryPage.jsx` | `/library` | Protected; loads entries, loading/error/empty states, per-entry status `<select>` → PUT, inline delete confirmation, busy guard | Done |
-| `src/pages/CommunityPage.jsx` | `/community` | Public route; renders `<Feed/>`. Only the first 10 posts load (no load-more), and there is no post composer, comments UI, or delete UI yet | Partial (2026-10-26) |
+| `src/pages/CommunityPage.jsx` | `/community` | Public route. Redesigned 2026-10-27: page header ("The lobby is open."), two-column layout with a sticky side rail (house rules + quick links) and a mobile rules card below the feed. Sticky fix 2026-10-27: removed `lg:items-start` so the grid stretches `<aside>` to the feed's height (a short aside confined the sticky panel). Renders `<Feed/>`; comments open inline per post. Still no post-delete UI or feed pagination; only the first 10 posts load | Partial (2026-10-27) |
 
 `/` redirects to `/home` with `replace`.
 
@@ -62,14 +63,19 @@ Root: `Frontend/`
 | --- | --- | --- |
 | `src/components/games/GameCard.jsx` | Redesigned reusable card: artwork overlay, rating/Metacritic badges (**`backdrop-blur` removed** — recomposites every scroll frame), ratings count, year, up to two genres, hover CTA; hover is lift + lime border (**big soft shadow removed** — paint-expensive while cards slide under the cursor during scroll); **`memo`-wrapped** so appends re-render only the new cards | Done (2026-10-24) |
 | `src/components/games/GameGrid.jsx` | Reusable responsive game grid (authored by the author, extracted from ExplorePage): renders `GameCard`s with the 1/2/3/4-col classes; consumed by `ExplorePage`. Working-tree change wraps it in `memo` (uncommitted) | Done (2026-10-24); `memo(GameGrid)` uncommitted (2026-10-26) |
-| `src/components/Feed.jsx` | Community feed: loads `getFeed(0, 10)` on mount, module-level `globalFeedCache` survives navigation and skips the refetch, maps posts to `PostCard`; basic loading/error text, no empty state, no pagination | Partial (2026-10-26) |
-| `src/components/PostCard.jsx` | One community post: author + content + comment count; optimistic like button with per-post 800 ms debounce queue, `globalLikeState` cache surviving unmount, redirect to `/login` when `isLoggedIn()` is false; registers a `beforeunload` flush listener per card (see defects in Work Log) | Partial (2026-10-26) |
+| `src/components/Feed.jsx` | Community feed (redesigned 2026-10-27): renders `PostComposer` + "Latest posts" header, `globalFeedCache` (now in `utils/feedCache.js`) survives navigation, new posts prepend locally + update the cache, post-count pill, animated skeletons, error card with retry, dashed empty state, and an end-of-feed note. Still first page only (`getFeed(0, 10)`), no pagination | Partial (2026-10-27) |
+| `src/components/PostCard.jsx` | Redesigned 2026-10-27: card with avatar/name/relative timestamp, whitespace-preserving content, optional image, like button (SVG heart, `aria-pressed`) and a comment button that expands `CommentsSection` (`aria-expanded`/`aria-controls`). Comment totals sync back into the card and `globalFeedCache`. Keeps the optimistic like queue (`globalLikeQueue` / `globalTimeOuts` / `globalLikeState`, 800 ms debounce, survives unmount) and rolls the like back with an error on failure; the `beforeunload` flush uses `VITE_API_BASE_URL` and the Bearer token | Partial (2026-10-27) |
+| `src/components/PostComposer.jsx` | New 2026-10-27: signed-in composer (avatar, textarea capped at 2000 chars matching the backend, optional image URL toggle, live counter, submit/error states) calling `createPost`; signed-out state renders a "Join the conversation" card with Login/Create account links; auth boot renders a skeleton | Done (2026-10-27) |
+| `src/components/CommentsSection.jsx` | New 2026-10-27: inline comments panel. Lazy-loads page 0 (20 per page) when a post card is expanded, with skeleton/error/retry/empty states and "Load more" for older pages; merges pages and new comments in `createdAt` order. Signed-in users get a 500-char input + `addComment`; signed-out users get a Login link. Authors (and the post owner) can delete a comment with an inline Yes/No confirm via `deleteComment`; totals are pushed to the parent card | Done (2026-10-27) |
+| `src/components/Avatar.jsx` | New 2026-10-27: shared avatar (image when `src` exists, otherwise a lime initial on a token gradient); used by `PostCard`, `PostComposer`, and `CommentsSection` | Done (2026-10-27) |
+| `src/utils/time.js` | New 2026-10-27: `parseApiDate` (normalizes Java fractional seconds) + `timeAgo`; shared by `PostCard` and `CommentsSection` | Done (2026-10-27) |
+| `src/utils/feedCache.js` | New 2026-10-27: module-level `globalFeedCache` + `updateCachedPost` helper; lets `PostCard` persist updated comment counts across navigation without importing `Feed` | Done (2026-10-27) |
 | `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend; `fetchGames(page)` drives infinite scroll. Uncommitted working-tree change adds `optimizedImageUrl(url, 600, 400)` (rewrites `/media/` → `/media/crop/600/400/` with a null guard) and maps each result; the dead cache block is gone. This is part of the scroll-lag fix (smaller images decode/paint faster). Parses and builds | Done; image-crop optimization uncommitted (2026-10-26) |
 | `src/services/libraryService.js` | `getLibrary`, `addToLibrary` (POST), `updateStatus` (PUT), `deleteFromLibrary` (DELETE; handles 204); attach `Authorization`; normalized errors with `status`/`fieldErrors` | Done |
 | `src/constants/libraryStatuses.js` | Single source for the four status `{ value, label }` options (library page + details page) | Done |
-| `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token), `isLoggedIn()` (token-presence check used by the like button). **Stray unused `import ExplorePage` at the top is one of 4 current lint errors** | Done — lint cleanup owed (2026-10-26) |
+| `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token), `isLoggedIn()` (token-presence check used by the like button). The stray unused `ExplorePage` import was removed 2026-10-27 | Done (2026-10-27) |
 | `src/services/apiService.js` | Central `apiRequest(path, options)` fetch helper: prefixes `VITE_API_BASE_URL`, always sets `Content-Type`, attaches `Bearer` when a token exists, throws `Error(message)` on non-2xx, returns `null` on 204. Does **not** attach `status`/`fieldErrors` like the older services do | Done (2026-10-26) |
-| `src/services/communityService.js` | Community API surface: `getFeed(page, size)`, `createPost`, `deletePost`, `getComments`, `addComment`, `deleteComment`, `likePost`, `unLikePost` — all via `apiRequest`. Only `getFeed`, `likePost`, `unLikePost` are currently consumed; `deleteComment(postId)` targets `/posts/{postId}/comments` (DELETE) while the backend exposes `DELETE /api/comments/{id}` — unused, but wrong | Partial (2026-10-26) |
+| `src/services/communityService.js` | Community API surface: `getFeed(page, size)`, `createPost`, `deletePost`, `getComments`, `addComment`, `deleteComment(commentId)`, `likePost`, `unLikePost` — all via `apiRequest`. Fixed 2026-10-27: `deleteComment` now targets the backend's real route, `DELETE /api/comments/{id}`. `getFeed`, `getComments`, `addComment`, `deleteComment`, `likePost`, `unLikePost` are consumed; `deletePost` is still unused | Partial (2026-10-27) |
 | `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
 | `src/services/reviewService.js` | `getReviewByGame(rawgId)` (GET `/review?rawgId=`), `createReview` (POST), `updateReview` (PUT), `deleteReview` (DELETE with 204 guard → `null`); all attach `Authorization`; normalized errors (`status`/`fieldErrors`) — authored through 4 coaching rounds: headers nesting, correct query-param URL (path vs query lesson), no-swallow error deal (services throw → components catch; catch must rethrow), `JSON.stringify(userData)` single-arg (second arg is a replacer filter), `${reviewId}` template var, 204 no-body guard | Done |
 | `src/components/reviews/ReviewSection.jsx` | Reviews on `/game/:id`: load-on-mount (loading/error/empty/list), signed-out prompt, form (star rating component + textarea) for create **and** edit (`editingId` — one form, two jobs), 409/400 error mapping, server-response list updates (add/replace/filter), author-only Edit/Delete with `busyId` guard; `StarRating` sub-component (hover preview, 1–5 buttons, unused `readOnly` prop parked as a free hook for list rendering) | Done — browser-verified: create/edit/duplicate-409/delete/signed-out prompt (2026-10-23) |
@@ -92,16 +98,16 @@ Root: `Frontend/`
 
 ```powershell
 cd Frontend
-npm run lint      # ESLint — FAILING (5 no-unused-vars, re-run 2026-10-26 after the scroll fix)
-npm run build     # Vite production build — passing (55 modules, re-run 2026-10-26)
+npm run lint      # ESLint — passing (0 errors, 2026-10-27)
+npm run build     # Vite production build — passing (60 modules, 2026-10-27)
 npm run dev       # dev server
 ```
 
-Current lint errors (2026-10-26): `App.jsx:5` unused `Feed` import; `PostCard.jsx:1` unused
-`useRef`; `PostCard.jsx:2` unused `data`; `authService.js:1` unused `ExplorePage` import;
-`ExplorePage.jsx:4` unused `ScrollToTop` import (added during the scroll-lag fix, but
-`ScrollToTop` is already mounted globally — remove the import or actually render it).
-The uncommitted image-crop change in `gameService.js` parses and builds.
+Lint cleanup (2026-10-27): removed the unused `Feed` import and duplicate `ScrollToTop`
+mount (`App.jsx`), unused `useRef`/`data` (`PostCard.jsx`), unused `ScrollToTop`
+(`ExplorePage.jsx`), and the stray `ExplorePage` import (`authService.js`). Both the global
+shell refresh (tokens, fonts, Navbar, Footer, HomePage) and the community UI redesign build
+cleanly; browser visual + runtime passes are still owed.
 
 ---
 
@@ -288,6 +294,16 @@ edit applied migrations.
 | Explore | Scroll-lag fix (author-reported 2026-10-26): `memo(GameGrid)`, RAWG image URLs rewritten to 600×400 crops in `gameService.js`, `rootMargin` 300 → 500 | **Author reports lag fixed** — uncommitted working tree; no independent browser/long-scroll measurement recorded |
 | Frontend | `npm run lint` | **Failing — 5 errors** (`no-unused-vars`): `App.jsx:5` `Feed`, `PostCard.jsx:1` `useRef`, `PostCard.jsx:2` `data`, `ExplorePage.jsx:4` `ScrollToTop`, `authService.js:1` `ExplorePage` (re-run 2026-10-26 after the scroll fix) |
 | Frontend | `npm run build` | Passing — 55 modules (re-run 2026-10-26 with the uncommitted scroll-lag changes) |
+| Frontend | `npm run lint` after the global shell refresh and import cleanup | **Passing — 0 errors** (2026-10-27) |
+| Frontend | `npm run build` after the global shell refresh | Passing — 55 modules (2026-10-27) |
+| UI | Global shell refresh (design tokens, Space Grotesk/Inter, Navbar, Footer, HomePage) | Implemented — lint + build green; browser visual check not recorded (2026-10-27) |
+| UI | Community redesign (`CommunityPage`, `Feed`, `PostCard`, new `PostComposer` + `Avatar`) | Implemented — lint + build green (57 modules, 2026-10-27); no browser screenshot or post/like runtime walkthrough recorded |
+| Frontend | `npm run lint` after the community redesign | **Passing — 0 errors** (2026-10-27) |
+| Frontend | `npm run build` after the community redesign | Passing — 57 modules (2026-10-27) |
+| UI | Comments UI (`CommentsSection` + `PostCard` toggle): view, add, delete, load more, signed-out prompt | Implemented — lint + build green (60 modules, 2026-10-27); no browser walkthrough recorded |
+| Comments | Public `GET /api/posts/7/comments?page=0&size=20` (contract check for the panel) | Success — 200, 2 comments oldest-first, correct `content`/`totalElements`/`last`/`createdAt` shape (2026-10-27); authenticated POST/DELETE not yet tested |
+| Frontend | `npm run lint` after the comments UI | **Passing — 0 errors** (2026-10-27) |
+| Frontend | `npm run build` after the comments UI | Passing — 60 modules (2026-10-27) |
 | Frontend | Community feed/like browser walkthrough | **Not recorded** — feed GET + like POST/DELETE need a manual pass; the like queue/unload flush has known defects (Work Log) |
 
 ---
@@ -827,6 +843,88 @@ edit applied migrations.
   React/StrictMode. If lag returns, the remaining per-frame suspects are large `backdrop-filter`
   surfaces, costly shadows, and uncapped full-resolution images outside Explore.
 
+### 2026-10-27 — Global shell UI refresh
+
+- Added a Tailwind v4 design-token layer in `index.css` (`@theme`): `ink` surfaces
+  (#080a0e → #262e3a), a `mist` text scale, and `font-display` (Space Grotesk) alongside
+  Inter; dark color-scheme, lime text selection, and a global `:focus-visible` ring.
+- `index.html`: real page title + description, `theme-color`, and Google Fonts
+  preconnect/stylesheet (Space Grotesk + Inter).
+- Navbar rebuilt: 64px sticky bar, brand mark, active underline driven by `aria-current`,
+  user avatar chip, ghost Profile/Logout actions, and a corrected Login hover (the old
+  `hover:text-gray-700` was invisible on the dark bar); the mobile menu is labelled
+  (`aria-expanded`/`aria-controls`), uses an SVG toggle, and closes on navigation.
+- Footer rebuilt: brand + tagline, Browse/Account link columns, copyright + RAWG
+  attribution row.
+- HomePage rebuilt: ambient lime-glow hero + decorative "Library preview" panel
+  (`aria-hidden`), dual CTAs, highlight list, three feature cards that now link to
+  `/explore`, `/library`, `/community` (the stale "Coming soon" badges are gone), and a
+  closing create-account CTA band.
+- `MainLayout` adopts the token surface (`bg-ink-950 text-mist-100`).
+- Lint debt cleared while in the shell: removed the unused `Feed` import + duplicate
+  `ScrollToTop` mount (`App.jsx`), unused `useRef`/`data` (`PostCard.jsx`), unused
+  `ScrollToTop` (`ExplorePage.jsx`), and the stray `ExplorePage` import (`authService.js`).
+- Verified: `npm run lint` → 0 errors; `npm run build` → 55 modules (2026-10-27). No
+  browser screenshot or manual visual pass is recorded yet.
+
+### 2026-10-27 — Community page + post card redesign
+
+- `CommunityPage` rebuilt: "The lobby is open." header, two-column layout on `lg` (feed +
+  sticky 18rem side rail), house-rules card and quick links, and a mobile house-rules card
+  under the feed.
+- New `PostComposer` (uses the existing `createPost` service + `POST /api/posts`): signed-in
+  avatar + textarea (2000-char cap matching `PostRequest`), optional image-URL toggle, live
+  counter, posting/error states; signed-out users get a "Join the conversation" card with
+  Login/Create-account links. New posts prepend to the feed and update `globalFeedCache`.
+- `PostCard` rebuilt: avatar/name/relative timestamp (`Date` normalization for Java's
+  fractional seconds), whitespace-preserving content, optional image, SVG heart like button
+  (`aria-pressed`), comment-count stat, inline error banner. Like queue/debounce/caches are
+  preserved; failures now roll the like back and show an error. The `beforeunload` flush was
+  fixed to use `VITE_API_BASE_URL` + the Bearer token (previously a relative URL with no auth).
+- `Feed` rebuilt: composer + "Latest posts" header + count pill, three skeleton cards while
+  loading, error card with retry, dashed empty state, and an end-of-feed note. Still loads
+  only the first 10 posts — no pagination.
+- New `Avatar` component shared by the card and composer (image if `userAvatarUrl` exists,
+  otherwise a lime initial; the backend does not populate `userAvatarUrl` yet).
+- Still missing: comments UI, post-delete UI, feed pagination. `communityService.deleteComment`
+  still targets the wrong path (`/posts/{postId}/comments` instead of `/comments/{id}`) and
+  remains unused.
+- Verified: `npm run lint` → 0 errors; `npm run build` → 57 modules (2026-10-27). Browser
+  visual pass and a real post/like walkthrough are still owed.
+
+### 2026-10-27 — Comments UI
+
+- New `CommentsSection` rendered inline by `PostCard` when the comment button is toggled
+  (`aria-expanded` / `aria-controls`). Loads page 0 (20 comments, oldest-first) lazily on
+  expand, with skeleton, error + retry, and empty states; "Load more comments" fetches older
+  pages. Fetched pages and newly added comments are merged and sorted by `createdAt` (then
+  `id`) so adding while older pages are unloaded keeps chronological order.
+- Signed-in users can add a comment (500-char cap matching `CommentRequest#content`, input +
+  submit, inline error). Signed-out users see "Log in to join the conversation" — reading
+  comments stays public.
+- Delete is offered to the comment author or the post owner (matching backend authorization)
+  with an inline Yes/No confirm; success removes the row and decrements the total.
+- `PostCard` now owns `commentCount`, re-syncs it when comments load (`totalElements`) and
+  after add/delete, and writes it back into `globalFeedCache` via the new `updateCachedPost`
+  helper so the count survives navigation. `globalFeedCache` moved to `utils/feedCache.js`.
+- Fixed `communityService.deleteComment`: it now calls `DELETE /api/comments/{id}` (was
+  `DELETE /posts/{postId}/comments`, which the backend does not expose).
+- Extracted `timeAgo` (+ `parseApiDate`) to `utils/time.js`; `PostCard` and `CommentsSection`
+  share it.
+- Verified: `npm run lint` → 0 errors; `npm run build` → 60 modules (2026-10-27). Runtime
+  contract check: public `GET /api/posts/7/comments?page=0&size=20` returned 200 with the
+  expected page shape (2 comments, oldest-first). Browser walkthrough (open comments, add,
+  delete, signed-out) is still owed, as is an authenticated POST/DELETE check.
+
+### 2026-10-27 — Community side rail sticky fix
+
+- The house-rules/quick-links rail stopped sticking after a short scroll: the grid used
+  `lg:items-start`, which sized the `<aside>` to its content instead of the feed's height,
+  so the sticky child had no room to move inside its containing block. Removed
+  `lg:items-start`; the default grid stretch gives the aside the full row height while the
+  inner `sticky top-24` panel stays put. `npm run lint` (0 errors) + `npm run build` (60
+  modules) re-run.
+
 ### Earlier
 
 - Frontend game discovery UI (from the pre-pagination era: ExplorePage single fetch,
@@ -855,17 +953,15 @@ edit applied migrations.
   + orphan `htmlFor` label in `ReviewSection.jsx`; read-only `StarRating` in review list
   items.
 - Community posts, likes, comments — **backend committed (c28f123), frontend partial
-  (e9e1c9a)**: paged public feed, post create/delete, comments, like/unlike endpoints all
-  exist; V6 applied. `/community` shows the first 10 posts with a like button only.
-  **Owed:** runtime re-check of like DELETE after the `@Transactional` fix; composer +
-  comments UI + delete UI + pagination; fix the unload flush (relative URL, no auth) and
-  the `deleteComment` endpoint mismatch.
-- **Frontend lint cleanup:** 5 unused imports remain (build is green). Includes the
-  `ScrollToTop` import just added to `ExplorePage.jsx` during the scroll-lag experiment.
-- Frontend cleanup debt: unused `Feed` import + duplicate `ScrollToTop` mount in `App.jsx`,
-  unused `useRef`/`data` in `PostCard.jsx`, stray `ExplorePage` import in `authService.js`,
-  unused `ScrollToTop` import in `ExplorePage.jsx`;
-  `apiService` missing the `status`/`fieldErrors` convention; legacy `models/Game.java`
-  still in the backend.
+  (e9e1c9a, redesigned + comments 2026-10-27)**: paged public feed, post create/delete,
+  comments, like/unlike endpoints all exist; V6 applied. `/community` now has a header +
+  side rail, a working post composer, redesigned post cards (first 10 posts, like button),
+  and inline comments (view/add/delete, paged). **Owed:** runtime re-check of like DELETE
+  after the `@Transactional` fix; browser walkthrough of the composer/like/comments UI;
+  post-delete UI; feed pagination.
+- **Frontend lint cleanup:** closed 2026-10-27 — `npm run lint` passes with 0 errors after
+  removing the five unused imports and the duplicate `ScrollToTop` mount.
+- Frontend cleanup debt: `apiService` missing the `status`/`fieldErrors` convention;
+  legacy `models/Game.java` still in the backend.
 - Automated feature tests (backend and frontend).
 - Deployment configuration.

@@ -1,9 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+
+  --color-ink-950: #080a0e;
+  --color-ink-900: #0c0e13;
+  --color-ink-850: #11141a;
+  --color-ink-800: #171a22;
+  --color-ink-700: #1e232d;
+  --color-ink-600: #262e3a;
+
+  --color-mist-100: #f3f5f8;
+  --color-mist-200: #dbe1e9;
+  --color-mist-300: #c4ccd8;
+  --color-mist-400: #98a2b3;
+  --color-mist-500: #748091;
+  --color-mist-600: #56606f;
+}
+
 :root {
-  font-family: Inter, system-ui, sans-serif;
-  color: #f3f4f6;
-  background: #111318;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -18,4 +35,17 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background-color: var(--color-ink-950);
+  color: var(--color-mist-100);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background-color: #bef264;
+  color: var(--color-ink-950);
+}
+
+:where(a, button, input, textarea, select):focus-visible {
+  outline: 0px solid #a3e635;
+  outline-offset: 2px;
 }

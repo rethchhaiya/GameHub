@@ -29,8 +29,8 @@ export function addComment(postId, content) {
   });
 }
 
-export function deleteComment(postId) {
-  return apiRequest(`/posts/${postId}/comments`, {
+export function deleteComment(commentId) {
+  return apiRequest(`/comments/${commentId}`, {
     method: "DELETE",
   });
 }

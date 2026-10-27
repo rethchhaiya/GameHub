@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchGames, fetchGamesByName } from "../services/gameService";
 import GameGrid from "../components/games/GameGrid";
-import ScrollToTop from "../components/ScrollToTop";
 
 function ExplorePage() {
   const [error, setError] = useState("");
@@ -63,7 +62,7 @@ function ExplorePage() {
           setPage((p) => p + 1);
         }
       },
-      { rootMargin: "500px" },
+      { rootMargin: "300px" },
     );
 
     if (sentinelRef.current) {
