@@ -28,7 +28,6 @@ public class ImageUploadController {
         MultipartFile image) throws IOException{
 
         String imageUrl = imageUploadService.uploadProfilePicture(image);
-        System.out.println("Image url = "+ imageUrl);
 
         return ResponseEntity.ok(Map.of("imageUrl", imageUrl));
     }

@@ -35,8 +35,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/posts/**").permitAll()
-
-                .requestMatchers(HttpMethod.POST, "/api/images/**").permitAll()
                 
                 // .requestMatchers(HttpMethod.PUT, "/api/profile/me").permitAll()
                 .anyRequest().authenticated()
