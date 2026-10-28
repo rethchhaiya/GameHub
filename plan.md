@@ -1,4 +1,5 @@
 # GameHub Project Plan
+Do not delete the comment i wrote in the code when ever i told you to build something
 
 This document preserves the original GameHub project plan and the decisions made during planning. It separates what was decided, what is planned, what exists in the repository today, and what is still open. It is meant to be read before continuing development so the project direction is not accidentally changed.
 

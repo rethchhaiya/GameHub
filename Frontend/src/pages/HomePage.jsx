@@ -6,11 +6,11 @@ const primaryButton =
 const secondaryButton =
   "inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-mist-100 transition hover:border-white/30 hover:bg-white/10";
 
-const highlights = [
-  "Powered by the RAWG catalog",
-  "Four library statuses",
-  "Reviews, likes & comments",
-];
+// const highlights = [
+//   "Powered by the RAWG catalog",
+//   "Four library statuses",
+//   "Reviews, likes & comments",
+// ];
 
 const features = [
   {
@@ -85,10 +85,10 @@ function HomePage() {
 
         <div className="relative mx-auto grid max-w-7xl items-center gap-16 px-5 pb-20 pt-16 sm:px-8 sm:pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:px-12 lg:pb-28 lg:pt-24">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-mist-300">
+            {/* <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-mist-300">
               <span className="h-1.5 w-1.5 rounded-full bg-lime-400" />
               Game discovery, tracking & community
-            </span>
+            </span> */}
 
             <h1 className="mt-6 font-display text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
               Your gaming life,
@@ -110,14 +110,14 @@ function HomePage() {
               </Link>
             </div>
 
-            <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-mist-400">
+            {/* <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-mist-400">
               {highlights.map((item) => (
                 <li key={item} className="flex items-center gap-2">
                   <CheckIcon />
                   {item}
                 </li>
               ))}
-            </ul>
+            </ul> */}
           </div>
 
           <div

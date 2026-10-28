@@ -10,8 +10,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.gamehub.backend.exception.EmailAlreadyExistsException;
+import com.gamehub.backend.exception.EmptyFileException;
+import com.gamehub.backend.exception.FileTooLargeException;
 import com.gamehub.backend.exception.GameAlreadyInLibraryException;
 import com.gamehub.backend.exception.InvalidCredentialsException;
+import com.gamehub.backend.exception.InvalidFileTypeException;
 import com.gamehub.backend.exception.ResourceNotFoundException;
 import com.gamehub.backend.exception.ReviewAlreadyExistsException;
 import com.gamehub.backend.exception.UnauthorizedCommentDeletionException;
@@ -87,6 +90,22 @@ public class GlobalExceptionHandler {
                              .body(Map.of("message", exception.getMessage()));
     }
 
-    
+    @ExceptionHandler(InvalidFileTypeException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidFileType(InvalidFileTypeException exception){
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                             .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(FileTooLargeException.class)
+    public ResponseEntity<Map<String, String>> handleFileSize(FileTooLargeException exception){
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                             .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(EmptyFileException.class)
+    public ResponseEntity<Map<String, String>> handleEmptyFile(EmptyFileException exception){
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                             .body(Map.of("message", exception.getMessage()));
+    }
 
 }
