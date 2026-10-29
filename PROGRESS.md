@@ -3,12 +3,12 @@
 A living inventory of **everything built so far** in GameHub. Companion to `plan.md`
 (which holds the original plan and decisions). Update this file as features are completed.
 
-Last updated: 2026-10-27 (Global shell UI refresh + community UI redesign + comments UI:
-Tailwind v4 design tokens + Space Grotesk/Inter; Navbar, Footer, MainLayout, and HomePage rebuilt;
-`/community` has a header, sticky side rail (rules/quick links), signed-in post composer, redesigned
-post cards with relative timestamps and liked/error states, feed skeleton/empty/error states, and
-an expandable comments panel with view/add/delete. Lint passes (0 errors) and `npm run build` is
-green at 60 modules. Browser visual + community runtime walkthrough still pending)
+Last updated: 2026-10-29 (Profile picture upload: Cloudinary-backed backend
+`POST /api/images/profile` (validation + `ImageUploadService` + `CloudinaryConfig`), and a new
+`ProfilePictureUpload` UI on `/profile` where picking a file is local-only — the Cloudinary upload
+runs only when "Save Profile" is pressed (option A). `npm run build` is green at 62 modules;
+`npm run lint` has 1 pre-existing error (`HomePage.jsx` `CheckIcon`, used only inside a
+commented-out block). Upload browser/runtime walkthrough still pending)
 
 Status legend: **Done** · **Partial** · **Stub** (placeholder exists) · **Not started**
 
@@ -51,7 +51,7 @@ Root: `Frontend/`
 | `src/pages/GameDetailsPage.jsx` | `/game/:id` | Redesigned hero + two-column layout; details, genres/devs/publishers/platforms; screenshot gallery + lightbox (arrows, Esc, click-out); "Your library" card (status select → `addToLibrary`, 409 + signed-out states) | Done |
 | `src/pages/LoginPage.jsx` | `/login` | Login form → `loginUser` → destructure `{token, user}` → `login(user, token)` → `navigate('/home')`; error display | Done |
 | `src/pages/RegisterPage.jsx` | `/register` | Register form + confirm-password check → `registerUser` → `login(user, token)` → `navigate('/home')` | Done |
-| `src/pages/ProfilePage.jsx` | `/profile` | Protected; loads the current profile (404 → empty form), edits `bio`/`avatarUrl`, live avatar preview, saves via `updateProfile`, error/success banners | Done |
+| `src/pages/ProfilePage.jsx` | `/profile` | Protected; loads the current profile (404 → empty form), edits `bio`/`avatarUrl`, live avatar preview, saves via `updateProfile`, error/success banners. 2026-10-29: hosts the profile-picture upload — `avatarFile` pending state, `handleSubmit` uploads via `uploadImage` then `PUT /api/profile/me`; pending file is cleared after upload so a failed save retries only the PUT; editing the Image URL field clears the pending file; Remove clears the URL so Save persists the removal | Done (2026-10-29) |
 | `src/pages/MyLibraryPage.jsx` | `/library` | Protected; loads entries, loading/error/empty states, per-entry status `<select>` → PUT, inline delete confirmation, busy guard | Done |
 | `src/pages/CommunityPage.jsx` | `/community` | Public route. Redesigned 2026-10-27: page header ("The lobby is open."), two-column layout with a sticky side rail (house rules + quick links) and a mobile rules card below the feed. Sticky fix 2026-10-27: removed `lg:items-start` so the grid stretches `<aside>` to the feed's height (a short aside confined the sticky panel). Renders `<Feed/>`; comments open inline per post. Still no post-delete UI or feed pagination; only the first 10 posts load | Partial (2026-10-27) |
 
@@ -68,13 +68,15 @@ Root: `Frontend/`
 | `src/components/PostComposer.jsx` | New 2026-10-27: signed-in composer (avatar, textarea capped at 2000 chars matching the backend, optional image URL toggle, live counter, submit/error states) calling `createPost`; signed-out state renders a "Join the conversation" card with Login/Create account links; auth boot renders a skeleton | Done (2026-10-27) |
 | `src/components/CommentsSection.jsx` | New 2026-10-27: inline comments panel. Lazy-loads page 0 (20 per page) when a post card is expanded, with skeleton/error/retry/empty states and "Load more" for older pages; merges pages and new comments in `createdAt` order. Signed-in users get a 500-char input + `addComment`; signed-out users get a Login link. Authors (and the post owner) can delete a comment with an inline Yes/No confirm via `deleteComment`; totals are pushed to the parent card | Done (2026-10-27) |
 | `src/components/Avatar.jsx` | New 2026-10-27: shared avatar (image when `src` exists, otherwise a lime initial on a token gradient); used by `PostCard`, `PostComposer`, and `CommentsSection` | Done (2026-10-27) |
+| `src/components/ProfilePictureUpload.jsx` | New 2026-10-28, refactored 2026-10-29: circular avatar picker with click + drag-and-drop, local validation (JPEG/PNG/JPG/WebP, 5 MB), object-URL preview (revoked on replace/remove/unmount) and an "Unsaved — press Save Profile" hint. **No network code**: props are `value`/`file`/`onSelect`/`onClear`/`disabled`; the page owns the upload | Done (2026-10-29) |
 | `src/utils/time.js` | New 2026-10-27: `parseApiDate` (normalizes Java fractional seconds) + `timeAgo`; shared by `PostCard` and `CommentsSection` | Done (2026-10-27) |
 | `src/utils/feedCache.js` | New 2026-10-27: module-level `globalFeedCache` + `updateCachedPost` helper; lets `PostCard` persist updated comment counts across navigation without importing `Feed` | Done (2026-10-27) |
 | `src/services/gameService.js` | Fetch list, search by name, detail, screenshots from backend; `fetchGames(page)` drives infinite scroll. Uncommitted working-tree change adds `optimizedImageUrl(url, 600, 400)` (rewrites `/media/` → `/media/crop/600/400/` with a null guard) and maps each result; the dead cache block is gone. This is part of the scroll-lag fix (smaller images decode/paint faster). Parses and builds | Done; image-crop optimization uncommitted (2026-10-26) |
 | `src/services/libraryService.js` | `getLibrary`, `addToLibrary` (POST), `updateStatus` (PUT), `deleteFromLibrary` (DELETE; handles 204); attach `Authorization`; normalized errors with `status`/`fieldErrors` | Done |
 | `src/constants/libraryStatuses.js` | Single source for the four status `{ value, label }` options (library page + details page) | Done |
 | `src/services/authService.js` | `registerUser`, `loginUser` (POST + normalized error with `status`/`fieldErrors`), `getCurrentUser` (GET `/users/me` with stored token), `isLoggedIn()` (token-presence check used by the like button). The stray unused `ExplorePage` import was removed 2026-10-27 | Done (2026-10-27) |
-| `src/services/apiService.js` | Central `apiRequest(path, options)` fetch helper: prefixes `VITE_API_BASE_URL`, always sets `Content-Type`, attaches `Bearer` when a token exists, throws `Error(message)` on non-2xx, returns `null` on 204. Does **not** attach `status`/`fieldErrors` like the older services do | Done (2026-10-26) |
+| `src/services/apiService.js` | Central `apiRequest(path, options)` fetch helper: prefixes `VITE_API_BASE_URL`, sets `Content-Type: application/json` **except for `FormData` bodies** (so multipart uploads get the browser boundary), attaches `Bearer` when a token exists, throws `Error(message)` on non-2xx, returns `null` on 204. Does **not** attach `status`/`fieldErrors` like the older services do | Done (2026-10-26); FormData handling added 2026-10-28 |
+| `src/services/imageService.js` | New 2026-10-28: `uploadImage(file)` builds `FormData` (`image` field) and POSTs `/images/profile` via `apiRequest`, returning `{ imageUrl }` | Done (2026-10-28) |
 | `src/services/communityService.js` | Community API surface: `getFeed(page, size)`, `createPost`, `deletePost`, `getComments`, `addComment`, `deleteComment(commentId)`, `likePost`, `unLikePost` — all via `apiRequest`. Fixed 2026-10-27: `deleteComment` now targets the backend's real route, `DELETE /api/comments/{id}`. `getFeed`, `getComments`, `addComment`, `deleteComment`, `likePost`, `unLikePost` are consumed; `deletePost` is still unused | Partial (2026-10-27) |
 | `src/services/profileService.js` | `getProfile` (GET `/profile/me`, returns `null` on 404) and `updateProfile` (PUT `/profile/me`); both attach `Authorization: Bearer <token>` | Done |
 | `src/services/reviewService.js` | `getReviewByGame(rawgId)` (GET `/review?rawgId=`), `createReview` (POST), `updateReview` (PUT), `deleteReview` (DELETE with 204 guard → `null`); all attach `Authorization`; normalized errors (`status`/`fieldErrors`) — authored through 4 coaching rounds: headers nesting, correct query-param URL (path vs query lesson), no-swallow error deal (services throw → components catch; catch must rethrow), `JSON.stringify(userData)` single-arg (second arg is a replacer filter), `${reviewId}` template var, 204 no-body guard | Done |
@@ -98,16 +100,16 @@ Root: `Frontend/`
 
 ```powershell
 cd Frontend
-npm run lint      # ESLint — passing (0 errors, 2026-10-27)
-npm run build     # Vite production build — passing (60 modules, 2026-10-27)
+npm run lint      # ESLint — 1 error (HomePage.jsx CheckIcon, 2026-10-29)
+npm run build     # Vite production build — passing (62 modules, 2026-10-29)
 npm run dev       # dev server
 ```
 
-Lint cleanup (2026-10-27): removed the unused `Feed` import and duplicate `ScrollToTop`
-mount (`App.jsx`), unused `useRef`/`data` (`PostCard.jsx`), unused `ScrollToTop`
-(`ExplorePage.jsx`), and the stray `ExplorePage` import (`authService.js`). Both the global
-shell refresh (tokens, fonts, Navbar, Footer, HomePage) and the community UI redesign build
-cleanly; browser visual + runtime passes are still owed.
+The only remaining lint error is `HomePage.jsx:60` `CheckIcon` (`no-unused-vars`) — it is only
+referenced from the author's commented-out `<ul>` block, and the comment was deliberately kept
+(see `plan.md` rule), so it was not fixed. The upload work added no errors: the unused
+`ProfilePictureUpload` imports in `App.jsx` and `routes/index.jsx` were removed (the `/test` route
+is commented out), and `TestPage.jsx` is now dead code.
 
 ---
 
@@ -132,10 +134,10 @@ Root: `Backend/`
 | `.../PasswordConfig.java` | `BCryptPasswordEncoder` bean (root package, not a `config/` package) | Done |
 | Game endpoints (`/api/games`, `/api/games-name`, `/api/games/{id}`, `/api/games/{id}/screenshots`) | Proxy RAWG through Spring Boot; **Exercise 3 (2026-10-24)**: `key=` stripped from `next`/`previous` URLs (`stripRawgKeyFromLinks` + `java.net.URI`-based `removeKeyParam`, fail-closed on malformed URLs) — applied to all four GETs (deliberate spec deviation: screenshots lists also carried the key) | Done — runtime-verified 2026-10-24 |
 | `resources/db/migration/V1__create_users_table.sql` | Creates `users` table | Done |
-| `resources/application.properties` | DB config, `ddl-auto=none`, RAWG key from env, JWT config (`jwt.secret`, `jwt.expiration-ms`) | Done |
+| `resources/application.properties` | DB config, `ddl-auto=none`, RAWG key from env, JWT config (`jwt.secret`, `jwt.expiration-ms`); since 2026-10-28 also Cloudinary (`CLOUDINARY_CLOUD_NAME`/`CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET`) and multipart limits (`max-file-size`/`max-request-size` = 5 MB) | Done |
 | `.../config/SecurityConfig.java` | `SecurityFilterChain`: public game/auth paths **and `GET /api/posts/**`** (feed + comments readable signed out) `permitAll`, rest `authenticated`, stateless, CSRF off; `CorsConfigurationSource` bean (origin 5173, `/api/**`) wired explicitly via `.cors(cors -> cors.configurationSource(...))`; 401 JSON entry point; JWT filter registered via `addFilterBefore` | Done — public GET added 2026-10-26 (e9e1c9a) |
 | `.../services/JwtService.java` | Sign (`generateToken`) and verify (`parseToken`) HS256 tokens | Done |
-| Pom dependencies | `spring-boot-starter-security` + jjwt 0.12.6 (`jjwt-api`/`jjwt-impl`/`jjwt-gson`) | Done |
+| Pom dependencies | `spring-boot-starter-security` + jjwt 0.12.6 (`jjwt-api`/`jjwt-impl`/`jjwt-gson`) + `com.cloudinary:cloudinary-http5:2.0.0` (added 2026-10-28) | Done |
 | `.../security/JwtAuthenticationFilter.java` | Reads `Authorization: Bearer`, parses via `JwtService`, loads user via `UserService.findById`, sets `SecurityContextHolder`; fail-safe on invalid token; registered in `SecurityConfig` via `addFilterBefore` | Done |
 | `.../services/UserService.java` (`findById`) | Delegates to `userRepository.findById`, returns `Optional<User>` | Done |
 | JWT auth wiring (token issued, stored, verified server-side, and attached by the frontend) | Persistent authentication | Done |
@@ -169,6 +171,10 @@ Root: `Backend/`
 | `.../services/LikeService.java` | `likePost` (exists-check then inherited `save`), `unlikePost` (derived `deleteByUserAndPost`), shared `buildResponse`. **`@Transactional` is present on `unlikePost` (LikeService.java:39)** — the 2026-10-25 fix direction is already in source | Source fixed (shipped in c28f123); runtime re-check of DELETE owed — last recorded receipt is still the 2026-10-25 401 |
 | `.../controllers/PostController.java`, `CommentController.java`, `CommentDeleteController.java`, `LikeController.java` | `GET/POST /api/posts`, `DELETE /api/posts/{id}`, `GET/POST /api/posts/{postId}/comments`, `DELETE /api/comments/{id}`, `POST/DELETE /api/posts/{postId}/likes`; principal via `@AuthenticationPrincipal`, `@Valid` bodies. POST/create endpoints return **200**, not 201; comment delete lives on a separate `/api/comments` controller | Done (committed c28f123); like POST verified 2026-10-25 |
 | `.../exception/UnauthorizedPostDeletionException.java`, `UnauthorizedCommentDeletionException.java` | Author-only post delete / comment author-or-post-owner delete → 403 via `GlobalExceptionHandler` | Done (committed c28f123) |
+| `.../config/CloudinaryConfig.java` | Reads `cloudinary.cloud-name`/`cloudinary.api-key`/`cloudinary.api-secret` and builds the `Cloudinary` bean (`secure=true`); `cloudinary-http5` 2.0.0 added to `pom.xml` | Done (committed 69077fa/d7b3fd3, 2026-10-28) |
+| `.../services/ImageUploadService.java` | Validates the upload (non-empty, ≤ 5 MB, content type in JPEG/PNG/JPG/WebP) then uploads the bytes to Cloudinary folder `gamehub/profile` and returns `secure_url` | Done (2026-10-28) |
+| `.../controllers/ImageUploadController.java` | `POST /api/images/profile` — `multipart/form-data` param `image` → 200 `{ imageUrl }`; requires a valid token (the temporary `permitAll` matcher was removed in 4eba2ef) | Done (2026-10-28) |
+| `.../exception/EmptyFileException.java`, `FileTooLargeException.java`, `InvalidFileTypeException.java` | Upload validation failures; all mapped to **400** in `GlobalExceptionHandler` | Done (2026-10-28) |
 | `.../models/Game.java` | Legacy plain POJO (`name`, `rating`, `backgroundImage`) — **unused**; `GameService` returns RAWG `JsonNode` directly | Dead code |
 
 ### Backend check
@@ -211,6 +217,7 @@ cd Backend
 | DELETE | `/api/comments/{id}` | Implemented (committed) — comment author or post owner → 204; otherwise 403; note the path is `/api/comments/{id}`, not nested under the post |
 | POST | `/api/posts/{postId}/likes` | Implemented — works (author-reported 2026-10-25); returns `LikeResponse` 200 |
 | DELETE | `/api/posts/{postId}/likes` | Source fixed — `@Transactional` now on `LikeService.unlikePost` (LikeService.java:39); **runtime re-check still owed** (last receipt was the 2026-10-25 401) |
+| POST | `/api/images/profile` | Implemented (2026-10-28) — requires a valid token; `multipart/form-data` field `image` → 200 `{ imageUrl }`; server-side 5 MB + JPEG/PNG/JPG/WebP validation → 400 with `{ message }`; no runtime receipt recorded yet |
 
 ---
 
@@ -305,6 +312,10 @@ edit applied migrations.
 | Frontend | `npm run lint` after the comments UI | **Passing — 0 errors** (2026-10-27) |
 | Frontend | `npm run build` after the comments UI | Passing — 60 modules (2026-10-27) |
 | Frontend | Community feed/like browser walkthrough | **Not recorded** — feed GET + like POST/DELETE need a manual pass; the like queue/unload flush has known defects (Work Log) |
+| Backend | Image-upload slice (`CloudinaryConfig`, `ImageUploadService`, `ImageUploadController`, 3 exceptions + 400 mappings, multipart limits, `cloudinary-http5`) | Implemented and committed 2026-10-28 (69077fa → 4eba2ef); no compile/runtime receipt recorded in this docs pass |
+| Upload | Profile picture UI: pick/drop → local preview only; Save Profile uploads → Cloudinary → `PUT /api/profile/me` | Implemented 2026-10-29 (option A); **no browser/Cloudinary round-trip recorded** |
+| Frontend | `npm run lint` after the upload refactor | **Failing — 1 pre-existing error** (`HomePage.jsx:60` `CheckIcon`, only referenced from a commented-out block) (2026-10-29) |
+| Frontend | `npm run build` after the upload refactor | Passing — 62 modules (2026-10-29) |
 
 ---
 
@@ -925,6 +936,47 @@ edit applied migrations.
   inner `sticky top-24` panel stays put. `npm run lint` (0 errors) + `npm run build` (60
   modules) re-run.
 
+### 2026-10-28 — Profile picture upload (Cloudinary)
+
+- Backend (commits 69077fa → 4eba2ef): `cloudinary-http5` 2.0.0, `CloudinaryConfig`
+  (`CLOUDINARY_CLOUD_NAME`/`CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET`),
+  `ImageUploadService` (non-empty + ≤ 5 MB + JPEG/PNG/JPG/WebP checks, upload to the
+  `gamehub/profile` folder, returns `secure_url`), `ImageUploadController`
+  (`POST /api/images/profile`, multipart field `image`), and `EmptyFileException` /
+  `FileTooLargeException` / `InvalidFileTypeException` mapped to 400. Multipart limits set
+  to 5 MB in `application.properties`. The endpoint was temporarily `permitAll`, then put
+  back behind authentication (4eba2ef); `apiService` now skips the JSON `Content-Type` for
+  `FormData` so the multipart boundary survives.
+- Frontend: `services/imageService.js` (`uploadImage` → `{ imageUrl }`), a first
+  `ProfilePictureUpload` component, and a temporary `/test` route (later commented out).
+- State at the end of the day: **selecting a file immediately POSTed to Cloudinary**, before
+  any save; the component lived only on `/test`; a `messsage` typo swallowed upload errors.
+
+### 2026-10-29 — Upload deferred to Save + profile integration (option A)
+
+- `ProfilePictureUpload` refactored to presentation-only: no `uploadImage` import, no
+  network code. New contract `value`/`file`/`onSelect`/`onClear`/`disabled`; the pending
+  `File` is lifted to the page, the component keeps only the object-URL preview (revoked on
+  replace/remove/unmount, cleanup-only effect so `react-hooks` stays green) plus client
+  validation and an "Unsaved — press Save Profile to keep it." hint. Also removed the
+  top-level `ProfilePictureUpload` imports that had become unused in `App.jsx` and
+  `routes/index.jsx` once `/test` was commented out.
+- `ProfilePage` now owns `avatarFile`. `handleSubmit` runs the upload only when a file is
+  pending: `POST /api/images/profile` → set `avatarUrl` → `PUT /api/profile/me`. The pending
+  file is cleared **after** a successful upload, so if the PUT fails the next Save re-sends
+  only the PUT (no duplicate Cloudinary asset for the same selection). Error copy separates
+  "upload failed" (file kept for retry) from "photo uploaded but profile wasn't saved".
+  Typing in the Image URL field clears the pending file (URL wins); Remove clears both the
+  file and the URL so Save persists the removal.
+- Effects: picking/dropping a file now produces **no** network request; the Cloudinary call
+  happens only on Save. No backend change was needed. An upload followed by a failed save
+  still leaves an orphaned Cloudinary asset (there is no delete endpoint).
+- Verified: `npm run build` → 62 modules; `npm run lint` → 1 error, the pre-existing
+  `HomePage.jsx:60` `CheckIcon` (used only inside the author's commented-out `<ul>`), left
+  untouched per the `plan.md` comment rule. Browser walkthrough (select → silent → Save →
+  reload → Remove) still owed. `TestPage.jsx` is now dead code; the `/test` route stays
+  commented out.
+
 ### Earlier
 
 - Frontend game discovery UI (from the pre-pagination era: ExplorePage single fetch,
@@ -959,9 +1011,15 @@ edit applied migrations.
   and inline comments (view/add/delete, paged). **Owed:** runtime re-check of like DELETE
   after the `@Transactional` fix; browser walkthrough of the composer/like/comments UI;
   post-delete UI; feed pagination.
-- **Frontend lint cleanup:** closed 2026-10-27 — `npm run lint` passes with 0 errors after
-  removing the five unused imports and the duplicate `ScrollToTop` mount.
+- Profile picture upload — **implemented (backend 2026-10-28, `/profile` UI 2026-10-29)**,
+  no runtime receipt yet. Owed: browser walkthrough (select → no request → Save → Cloudinary
+  POST + profile PUT → reload; Remove; failed-save retry), and Cloudinary orphan cleanup
+  (an upload whose `PUT` then fails leaves an unreferenced asset — no delete endpoint).
+- **Frontend lint:** 1 remaining error, `HomePage.jsx:60` `CheckIcon` (`no-unused-vars`) — it
+  is referenced only from the author's commented-out `<ul>`; the 2026-10-27 cleanup still
+  holds for the earlier imports, and the upload work added none.
 - Frontend cleanup debt: `apiService` missing the `status`/`fieldErrors` convention;
-  legacy `models/Game.java` still in the backend.
+  legacy `models/Game.java` still in the backend; `TestPage.jsx` is dead code after `/test`
+  was commented out.
 - Automated feature tests (backend and frontend).
 - Deployment configuration.
